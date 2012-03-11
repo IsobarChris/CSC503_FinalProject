@@ -21,12 +21,12 @@
 		527DD4CD150C3E5F003759E8 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		527DD4CE150C3E5F003759E8 /* CoreData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreData.framework; path = System/Library/Frameworks/CoreData.framework; sourceTree = SDKROOT; };
 		527DD4CF150C3E5F003759E8 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
-		527DD4D2150C3E5F003759E8 /* CSC503_FinalProject-Info.plist */ = {isa = PBXFileReference; path = "CSC503_FinalProject-Info.plist"; sourceTree = "<group>"; };
+		527DD4D2150C3E5F003759E8 /* CSC503_FinalProject-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "CSC503_FinalProject-Info.plist"; sourceTree = "<group>"; };
 		527DD4D4150C3E5F003759E8 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		527DD4D6150C3E5F003759E8 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
-		527DD4D8150C3E5F003759E8 /* CSC503_FinalProject-Prefix.pch */ = {isa = PBXFileReference; path = "CSC503_FinalProject-Prefix.pch"; sourceTree = "<group>"; };
+		527DD4D8150C3E5F003759E8 /* CSC503_FinalProject-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "CSC503_FinalProject-Prefix.pch"; sourceTree = "<group>"; };
 		527DD4DA150C3E5F003759E8 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; name = en; path = en.lproj/Credits.rtf; sourceTree = "<group>"; };
-		527DD4DC150C3E5F003759E8 /* DPFAppDelegate.h */ = {isa = PBXFileReference; path = DPFAppDelegate.h; sourceTree = "<group>"; };
+		527DD4DC150C3E5F003759E8 /* DPFAppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DPFAppDelegate.h; sourceTree = "<group>"; };
 		527DD4DD150C3E5F003759E8 /* DPFAppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = DPFAppDelegate.m; sourceTree = "<group>"; };
 		527DD4E0150C3E5F003759E8 /* en */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = en; path = en.lproj/MainMenu.xib; sourceTree = "<group>"; };
 /* End PBXFileReference section */
