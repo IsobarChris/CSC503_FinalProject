@@ -13,6 +13,9 @@
 		527DD4DB150C3E5F003759E8 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = 527DD4D9150C3E5F003759E8 /* Credits.rtf */; };
 		527DD4DE150C3E5F003759E8 /* DPFAppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 527DD4DD150C3E5F003759E8 /* DPFAppDelegate.m */; };
 		527DD4E1150C3E5F003759E8 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 527DD4DF150C3E5F003759E8 /* MainMenu.xib */; };
+		527DD4E9150C4418003759E8 /* DPFApplication.m in Sources */ = {isa = PBXBuildFile; fileRef = 527DD4E8150C4418003759E8 /* DPFApplication.m */; };
+		527DD4EC150C4589003759E8 /* DPFTerrainView.m in Sources */ = {isa = PBXBuildFile; fileRef = 527DD4EB150C4589003759E8 /* DPFTerrainView.m */; };
+		527DD4EE150C462D003759E8 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 527DD4ED150C462D003759E8 /* QuartzCore.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -29,6 +32,11 @@
 		527DD4DC150C3E5F003759E8 /* DPFAppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DPFAppDelegate.h; sourceTree = "<group>"; };
 		527DD4DD150C3E5F003759E8 /* DPFAppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = DPFAppDelegate.m; sourceTree = "<group>"; };
 		527DD4E0150C3E5F003759E8 /* en */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = en; path = en.lproj/MainMenu.xib; sourceTree = "<group>"; };
+		527DD4E7150C4418003759E8 /* DPFApplication.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DPFApplication.h; sourceTree = "<group>"; };
+		527DD4E8150C4418003759E8 /* DPFApplication.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DPFApplication.m; sourceTree = "<group>"; };
+		527DD4EA150C4589003759E8 /* DPFTerrainView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DPFTerrainView.h; sourceTree = "<group>"; };
+		527DD4EB150C4589003759E8 /* DPFTerrainView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DPFTerrainView.m; sourceTree = "<group>"; };
+		527DD4ED150C462D003759E8 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -36,6 +44,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				527DD4EE150C462D003759E8 /* QuartzCore.framework in Frameworks */,
 				527DD4CB150C3E5F003759E8 /* Cocoa.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -46,6 +55,7 @@
 		527DD4BB150C3E5E003759E8 = {
 			isa = PBXGroup;
 			children = (
+				527DD4ED150C462D003759E8 /* QuartzCore.framework */,
 				527DD4D0150C3E5F003759E8 /* CSC503_FinalProject */,
 				527DD4C9150C3E5F003759E8 /* Frameworks */,
 				527DD4C7150C3E5F003759E8 /* Products */,
@@ -86,6 +96,10 @@
 				527DD4DD150C3E5F003759E8 /* DPFAppDelegate.m */,
 				527DD4DF150C3E5F003759E8 /* MainMenu.xib */,
 				527DD4D1150C3E5F003759E8 /* Supporting Files */,
+				527DD4E7150C4418003759E8 /* DPFApplication.h */,
+				527DD4E8150C4418003759E8 /* DPFApplication.m */,
+				527DD4EA150C4589003759E8 /* DPFTerrainView.h */,
+				527DD4EB150C4589003759E8 /* DPFTerrainView.m */,
 			);
 			path = CSC503_FinalProject;
 			sourceTree = "<group>";
@@ -168,6 +182,8 @@
 			files = (
 				527DD4D7150C3E5F003759E8 /* main.m in Sources */,
 				527DD4DE150C3E5F003759E8 /* DPFAppDelegate.m in Sources */,
+				527DD4E9150C4418003759E8 /* DPFApplication.m in Sources */,
+				527DD4EC150C4589003759E8 /* DPFTerrainView.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
