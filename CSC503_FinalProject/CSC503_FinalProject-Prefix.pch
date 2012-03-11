@@ -1,0 +1,7 @@
+//
+// Prefix header for all source files of the 'CSC503_FinalProject' target in the 'CSC503_FinalProject' project
+//
+
+#ifdef __OBJC__
+    #import <Cocoa/Cocoa.h>
+#endif
