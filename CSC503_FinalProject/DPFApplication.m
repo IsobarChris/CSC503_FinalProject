@@ -17,4 +17,9 @@
     [super awakeFromNib];
 }
 
+-(IBAction)buttonPressed:(id)sender
+{
+    NSLog(@"Heye!!");
+}
+
 @end

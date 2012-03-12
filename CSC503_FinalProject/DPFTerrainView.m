@@ -14,8 +14,8 @@
 // size 2, seed 6
 
 
-#define SIZE_FACTOR 64  // can be 1,2,4,8
-#define MAP_SEED    5
+#define SIZE_FACTOR 32  // can be 1,2,4,8
+#define MAP_SEED    6
 
 #define WIDTH  (1024/SIZE_FACTOR)
 #define HEIGHT  (768/SIZE_FACTOR)
@@ -290,7 +290,7 @@ int settledVertCount;
         unsettledVertCount--;
         settledVerts[settledVertCount++] = u;
         u->inPath = YES;
-        NSLog(@"Removing Vert %04d @(%d,%d) from unsettledVerts(%d) to settledVerts(%d).",u->index,u->x,u->y,unsettledVertCount,settledVertCount);
+        //NSLog(@"Removing Vert %04d @(%d,%d) from unsettledVerts(%d) to settledVerts(%d).",u->index,u->x,u->y,unsettledVertCount,settledVertCount);
         
         // check each adjacent vert
         for(int d=0;d<DIRECTIONS;d++)
@@ -310,7 +310,7 @@ int settledVertCount;
                 dist[vIndex] = dist[uIndex] + terrainMovementPoints(v->terrain);
                 prev[vIndex] = u;
                 unsettledVerts[unsettledVertCount++] = v;
-                NSLog(@"Adding   Vert %04d @(%d,%d) to unsettledVerts(%d).",v->index,v->x,v->y,unsettledVertCount);
+                //NSLog(@"Adding   Vert %04d @(%d,%d) to unsettledVerts(%d).",v->index,v->x,v->y,unsettledVertCount);
             }
         }
     }

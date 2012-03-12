@@ -12,4 +12,7 @@
 
 @property (nonatomic,strong) IBOutlet NSView *view;
 
+-(IBAction)buttonPressed:(id)sender;
+
+
 @end
