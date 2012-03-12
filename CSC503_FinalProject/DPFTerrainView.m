@@ -14,8 +14,8 @@
 // size 2, seed 6
 
 
-#define SIZE_FACTOR 8  // can be 1,2,4,8
-#define MAP_SEED    6
+#define SIZE_FACTOR 64  // can be 1,2,4,8
+#define MAP_SEED    5
 
 #define WIDTH  (1024/SIZE_FACTOR)
 #define HEIGHT  (768/SIZE_FACTOR)
@@ -31,7 +31,7 @@
 #define DIR_SE 7
 
 #define MAX_DISTANCE 10000000.0
-#define MAX_VERTS (WIDTH*HEIGHT*DIRECTIONS)
+#define MAX_VERTS (WIDTH*HEIGHT)
 
 #define PIX_W  (1024/WIDTH)
 #define PIX_H  (768/HEIGHT)
@@ -61,6 +61,7 @@ typedef struct
     int x,y;
     DPFTerrain terrain;
     BOOL inPath;
+    int  index;
 }DPFVert;
 
 typedef struct
@@ -179,6 +180,8 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
             thePath[x][y] = NO;
             map[x][y].x = x;
             map[x][y].y = y;
+            map[x][y].inPath = NO;
+            map[x][y].index = y*WIDTH+x;
             if(x==0 || y==0 || x==WIDTH-1 || y==HEIGHT-1)
                 map[x][y].terrain = DPFTerrainVoid;                
             else
@@ -186,7 +189,7 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
         }
     
     
-    int terrainCounts[DPFTerrainCount] = {0,0,2*(8/SIZE_FACTOR),2*(8/SIZE_FACTOR),2*(8/SIZE_FACTOR),4*(8/SIZE_FACTOR),6*(8/SIZE_FACTOR)};
+    int terrainCounts[DPFTerrainCount] = {0,0,2*(8/SIZE_FACTOR),2*(8/SIZE_FACTOR),2*(8/SIZE_FACTOR),3*(8/SIZE_FACTOR)+1,5*(8/SIZE_FACTOR)+1};
     
     // random terrain and spread it out
     for(int t=0;t<DPFTerrainCount;t++)
@@ -218,18 +221,37 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
 DPFVert* allVerts[MAX_VERTS];
 int allVertsCount;
 
-CGFloat distance[MAX_VERTS];
-DPFVert* prevVerts[MAX_VERTS];
+DPFVert* unsettledVerts[MAX_VERTS];
+int unsettledVertCount;
 
-DPFVert* pathVerts[MAX_VERTS];
-int pathVertsCount;
+CGFloat dist[MAX_VERTS];
+DPFVert* prev[MAX_VERTS];
+
+DPFVert* settledVerts[MAX_VERTS];
+int settledVertCount;
 
 - (int)extractMinDistanceIndexFromVertsToSearch
 {
     int foundVertIndex = -1;
+    CGFloat minDist = MAX_DISTANCE;
     
-    // TODO: find min distance
+    for(int i=0;i<unsettledVertCount;i++)
+    {
+        DPFVert *vert = unsettledVerts[i];
+        if(minDist > dist[vert->index])
+        {
+            minDist = dist[vert->index];
+            foundVertIndex = i;
+        }
+    }
     
+    if(foundVertIndex>=0)
+    {
+        DPFVert *temp = unsettledVerts[foundVertIndex];
+        unsettledVerts[foundVertIndex] = unsettledVerts[unsettledVertCount-1];
+        unsettledVerts[unsettledVertCount-1] = temp;
+        foundVertIndex = unsettledVertCount-1;
+    }
     
     return foundVertIndex;
 }
@@ -239,30 +261,38 @@ int pathVertsCount;
     for(int x=0;x<WIDTH;x++)
         for(int y=0;y<HEIGHT;y++)
         {
-            allVerts[y*HEIGHT+x] = &map[x][y];
-            allVertsCount = 0;
+            if(&map[x][y]==NULL)
+                NSLog(@"Null map vert.");
+            allVerts[y*WIDTH+x] = &map[x][y];
+            allVertsCount++;
             map[x][y].inPath = NO;
+            map[x][y].index = y*WIDTH+x;
         }    
     
     for(int i=0;i<MAX_VERTS;i++)
     {
-        distance[i]=-1;
-        prevVerts[i]=NULL;     // pie
-        pathVerts[i]=NULL;     // S
+        dist[i]=MAX_DISTANCE;
+        prev[i]=NULL;
+        settledVerts[i]=NULL;
     }
  
-    distance[0] = 0.0f; // vert 0 is the start point
+    unsettledVerts[unsettledVertCount++] = allVerts[0];
+    dist[0] = 0.0f; // vert 0 is the start point
         
-    while(allVertsCount>0)
+    while(unsettledVertCount>0)
     {
         int uIndex = [self extractMinDistanceIndexFromVertsToSearch];
-        if(distance[uIndex]==-1)
+        if(dist[uIndex]==-1)
             break;
         
-        DPFVert *u = allVerts[uIndex];
-        allVerts[uIndex] = NULL;
-        allVertsCount--;
+        DPFVert *u = unsettledVerts[uIndex];
+        unsettledVerts[uIndex] = NULL;
+        unsettledVertCount--;
+        settledVerts[settledVertCount++] = u;
+        u->inPath = YES;
+        NSLog(@"Removing Vert %04d @(%d,%d) from unsettledVerts(%d) to settledVerts(%d).",u->index,u->x,u->y,unsettledVertCount,settledVertCount);
         
+        // check each adjacent vert
         for(int d=0;d<DIRECTIONS;d++)
         {
             int xOff = u->x+xOffsetForDirection(d);
@@ -271,25 +301,20 @@ int pathVertsCount;
                 continue;
             
             DPFVert *v = &map[xOff][yOff];
-            int vIndex = yOff*HEIGHT+xOff;
+            int vIndex = v->index;
             if(v->inPath)
                 continue;
             
-            CGFloat distToV = distance[uIndex] + terrainMovementPoints(v->terrain);
-            if(distToV < distance[vIndex])
+            if(dist[vIndex] > dist[uIndex] + terrainMovementPoints(v->terrain))
             {
-                distance[vIndex] = distToV;
-                prevVerts[vIndex] = u;
-                // decrease key
-            
+                dist[vIndex] = dist[uIndex] + terrainMovementPoints(v->terrain);
+                prev[vIndex] = u;
+                unsettledVerts[unsettledVertCount++] = v;
+                NSLog(@"Adding   Vert %04d @(%d,%d) to unsettledVerts(%d).",v->index,v->x,v->y,unsettledVertCount);
             }
-            
-            
-            
         }
-
-
     }
+    
 }
 
 - (void)findPath
@@ -297,9 +322,20 @@ int pathVertsCount;
     for(int x=0;x<WIDTH;x++)
         for(int y=0;y<HEIGHT;y++)
         {
-            if(x==(int)((float)y*((float)WIDTH/(float)HEIGHT)))
-                thePath[x][y] = YES;
+            //if(x==(int)((float)y*((float)WIDTH/(float)HEIGHT)))
+            //    thePath[x][y] = YES;
+            thePath[x][y] = NO;
         }
+    [self Dijkstra];
+    
+    
+    DPFVert *current = allVerts[(HEIGHT-2)*WIDTH+(WIDTH-2)];
+    while(current)
+    {
+        thePath[current->x][current->y] = YES;
+        current = prev[current->index];
+    }
+    
 }
 
 - (id)initWithFrame:(NSRect)frame
