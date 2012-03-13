@@ -15,11 +15,11 @@
 
 #define DRAW_STEPS 0
 
-#define SIZE_FACTOR 2  // can be 1,2,4,8
+#define SIZE_FACTOR 8  // can be 1,2,4,8
 #define MAP_SEED    5
 
-#define WIDTH  (1024/SIZE_FACTOR)
-#define HEIGHT  (768/SIZE_FACTOR)
+#define WIDTH  ((int)(1024/SIZE_FACTOR))
+#define HEIGHT  ((int)(768/SIZE_FACTOR))
 #define DIRECTIONS 8  // can be 4 or 8  
 
 #define DIR_N  0
@@ -34,8 +34,8 @@
 #define MAX_DISTANCE 10000000.0
 #define MAX_VERTS (WIDTH*HEIGHT)
 
-#define PIX_W  (1024/WIDTH)
-#define PIX_H  (768/HEIGHT)
+#define PIX_W  (1024.0f/(float)WIDTH)
+#define PIX_H  (768.0f/(float)HEIGHT)
 
 typedef enum
 {
@@ -453,7 +453,7 @@ int settledVertCount=0;
             //NSLog(@"r=%0.2f g=%0.2f b=%0.2f",r,g,b);
             
             CGContextSetRGBFillColor(ctx, r, g, b, 1);
-            CGContextFillRect(ctx, CGRectMake(x*PIX_W, y*PIX_H, PIX_W, PIX_H));
+            CGContextFillRect(ctx, CGRectMake((float)x*PIX_W, (float)y*PIX_H, PIX_W, PIX_H));
         }
     
     
@@ -471,17 +471,21 @@ int settledVertCount=0;
             if(thePath[x][y])
             {
                 CGContextSetRGBFillColor(ctx, 1, 1, 0, 1);
-                CGContextFillEllipseInRect(ctx, CGRectMake(x*PIX_W, y*PIX_H, PIX_W, PIX_H));
+                CGContextFillEllipseInRect(ctx, CGRectMake((float)x*PIX_W, (float)y*PIX_H, PIX_W, PIX_H));
             }
-            // Draw the text TrailsintheSand.com in light blue
-            if(dist[y*WIDTH+x]>=MAX_DISTANCE)
-                snprintf(buff, 64, "-00-");
-            else if((int)dist[y*WIDTH+x]>=9999)
-                snprintf(buff, 64, "----");
-            else
-                snprintf(buff, 64, "%04d",(int)dist[y*WIDTH+x]);
-            CGContextSetRGBFillColor(ctx, 0, 0, 0, 1);
-            CGContextShowTextAtPoint(ctx, x*PIX_W +SIZE_FACTOR/10 , y*PIX_H + PIX_H/2, buff, strlen(buff));                            
+            
+
+            if(SIZE_FACTOR>=16)
+            {
+                if(dist[y*WIDTH+x]>=MAX_DISTANCE)
+                    snprintf(buff, 64, "-00-");
+                else if((int)dist[y*WIDTH+x]>=9999)
+                    snprintf(buff, 64, "----");
+                else
+                    snprintf(buff, 64, "%04d",(int)dist[y*WIDTH+x]);
+                CGContextSetRGBFillColor(ctx, 0, 0, 0, 1);
+                CGContextShowTextAtPoint(ctx, (float)x*PIX_W +SIZE_FACTOR/10.0f , (float)y*PIX_H + PIX_H/2.0f, buff, strlen(buff));                            
+            }
         }
 }
 
