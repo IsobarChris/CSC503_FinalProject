@@ -13,9 +13,10 @@
 // size 4, seed 6
 // size 2, seed 6
 
+#define DRAW_STEPS 0
 
-#define SIZE_FACTOR 32  // can be 1,2,4,8
-#define MAP_SEED    6
+#define SIZE_FACTOR 2  // can be 1,2,4,8
+#define MAP_SEED    5
 
 #define WIDTH  (1024/SIZE_FACTOR)
 #define HEIGHT  (768/SIZE_FACTOR)
@@ -39,9 +40,9 @@
 typedef enum
 {
     DPFTerrainVoid=0,
+    DPFTerrainWater,
     DPFTerrainGround,
     DPFTerrainHills,
-    DPFTerrainWater,
     DPFTerrainForest,
     DPFTerrainMountain,
     DPFTerrainSwamp,
@@ -108,16 +109,16 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
 {
     switch (terrain) 
     {
-        case DPFTerrainVoid:     return MAX_DISTANCE;
-        case DPFTerrainGround:   return 10.0;
-        case DPFTerrainHills:    return 15.0;
-        case DPFTerrainWater:    return 80.0;
-        case DPFTerrainForest:   return 20.0;
-        case DPFTerrainMountain: return 50.0;
-        case DPFTerrainSwamp:    return 30.0;
-        default: return MAX_DISTANCE;
+        case DPFTerrainVoid:     return 9999;
+        case DPFTerrainGround:   return 1.0;
+        case DPFTerrainHills:    return 2.0;
+        case DPFTerrainWater:    return 8.0;
+        case DPFTerrainForest:   return 3.0;
+        case DPFTerrainMountain: return 5.0;
+        case DPFTerrainSwamp:    return 4.0;
+        default: return 9999;
     }
-    return MAX_DISTANCE;
+    return 9999;
 }
 
 
@@ -147,7 +148,7 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
         {
             int w = x+i;
             int h = y+j;
-            if(map[w][h].terrain == DPFTerrainGround)
+            if(map[w][h].terrain == DPFTerrainWater)
             {
                 map[w][h].terrain = terrain;
                 if([self trueForProb])
@@ -185,7 +186,7 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
             if(x==0 || y==0 || x==WIDTH-1 || y==HEIGHT-1)
                 map[x][y].terrain = DPFTerrainVoid;                
             else
-                map[x][y].terrain = DPFTerrainGround;
+                map[x][y].terrain = DPFTerrainWater;
         }
     
     
@@ -199,7 +200,7 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
         {
             int x = rand()%WIDTH;
             int y = rand()%HEIGHT;
-            if(map[x][y].terrain==DPFTerrainGround)
+            if(map[x][y].terrain==DPFTerrainWater)
             {
                 map[x][y].terrain = terrain;
                 [self spreadOutTerrain:terrain fromX:x andY:y];
@@ -219,16 +220,16 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
 }
 
 DPFVert* allVerts[MAX_VERTS];
-int allVertsCount;
+int allVertsCount=0;
 
 DPFVert* unsettledVerts[MAX_VERTS];
-int unsettledVertCount;
+int unsettledVertCount=0;
 
 CGFloat dist[MAX_VERTS];
 DPFVert* prev[MAX_VERTS];
 
 DPFVert* settledVerts[MAX_VERTS];
-int settledVertCount;
+int settledVertCount=0;
 
 - (int)extractMinDistanceIndexFromVertsToSearch
 {
@@ -256,7 +257,7 @@ int settledVertCount;
     return foundVertIndex;
 }
 
-- (void)Dijkstra
+- (void)resetDijkstra
 {
     for(int x=0;x<WIDTH;x++)
         for(int y=0;y<HEIGHT;y++)
@@ -275,46 +276,64 @@ int settledVertCount;
         prev[i]=NULL;
         settledVerts[i]=NULL;
     }
- 
-    unsettledVerts[unsettledVertCount++] = allVerts[0];
-    dist[0] = 0.0f; // vert 0 is the start point
-        
-    while(unsettledVertCount>0)
+    
+    DPFVert *startVert = allVerts[WIDTH+1];
+    int startIndex = startVert->index;
+    
+    unsettledVerts[unsettledVertCount++] = allVerts[startIndex];
+    dist[startIndex] = 0.0f; // vert 0 is the start point
+}
+
+- (BOOL)Dijkstra
+{
+    if(unsettledVertCount==0)
+        return NO;
+    
+    int qIndex = [self extractMinDistanceIndexFromVertsToSearch];
+    
+    DPFVert *v = NULL;
+    DPFVert *u = unsettledVerts[qIndex];
+    int uIndex = u->index;
+    if(dist[uIndex]==MAX_DISTANCE)
+        return NO;
+    
+    unsettledVerts[qIndex] = NULL;
+    unsettledVertCount--;
+    settledVerts[settledVertCount++] = u;
+    
+    if(u->x==WIDTH-2 && u->y==HEIGHT-2)
+        return NO;
+    
+    //u->inPath = YES;
+    //NSLog(@"Removing Vert %04d @(%d,%d) from unsettledVerts(%d) to settledVerts(%d).",u->index,u->x,u->y,unsettledVertCount,settledVertCount);
+    
+    // check each adjacent vert
+    for(int d=0;d<DIRECTIONS;d++)
     {
-        int uIndex = [self extractMinDistanceIndexFromVertsToSearch];
-        if(dist[uIndex]==-1)
-            break;
+        int xOff = u->x+xOffsetForDirection(d);
+        int yOff = u->y+yOffsetForDirection(d);
+        if(xOff<0 || yOff<0 || xOff>=WIDTH || yOff>=HEIGHT)
+            continue;
         
-        DPFVert *u = unsettledVerts[uIndex];
-        unsettledVerts[uIndex] = NULL;
-        unsettledVertCount--;
-        settledVerts[settledVertCount++] = u;
-        u->inPath = YES;
-        //NSLog(@"Removing Vert %04d @(%d,%d) from unsettledVerts(%d) to settledVerts(%d).",u->index,u->x,u->y,unsettledVertCount,settledVertCount);
+        v = &map[xOff][yOff];
+        int vIndex = v->index;
+        //if(v->inPath)
+        //    continue;
         
-        // check each adjacent vert
-        for(int d=0;d<DIRECTIONS;d++)
+        CGFloat distToV = terrainMovementPoints(v->terrain);
+        if(u->x!=v->x && u->y!=v->y)
+            distToV *= 1.4;
+        
+        if(dist[vIndex] > dist[uIndex] + distToV)
         {
-            int xOff = u->x+xOffsetForDirection(d);
-            int yOff = u->y+yOffsetForDirection(d);
-            if(xOff<0 || yOff<0 || xOff>=WIDTH || yOff>=HEIGHT)
-                continue;
-            
-            DPFVert *v = &map[xOff][yOff];
-            int vIndex = v->index;
-            if(v->inPath)
-                continue;
-            
-            if(dist[vIndex] > dist[uIndex] + terrainMovementPoints(v->terrain))
-            {
-                dist[vIndex] = dist[uIndex] + terrainMovementPoints(v->terrain);
-                prev[vIndex] = u;
-                unsettledVerts[unsettledVertCount++] = v;
-                //NSLog(@"Adding   Vert %04d @(%d,%d) to unsettledVerts(%d).",v->index,v->x,v->y,unsettledVertCount);
-            }
+            dist[vIndex] = dist[uIndex] + distToV;
+            prev[vIndex] = u;
+            unsettledVerts[unsettledVertCount++] = v;
+            //NSLog(@"Adding   Vert %04d @(%d,%d) to unsettledVerts(%d).",v->index,v->x,v->y,unsettledVertCount);
         }
     }
     
+    return YES;
 }
 
 - (void)findPath
@@ -326,8 +345,6 @@ int settledVertCount;
             //    thePath[x][y] = YES;
             thePath[x][y] = NO;
         }
-    [self Dijkstra];
-    
     
     DPFVert *current = allVerts[(HEIGHT-2)*WIDTH+(WIDTH-2)];
     while(current)
@@ -374,15 +391,35 @@ int settledVertCount;
         terrainColor[DPFTerrainWater].g = 0.0;
         terrainColor[DPFTerrainWater].b = 1.0;
         
-        [self findPath];
+        [self resetDijkstra];
+        [self setNeedsDisplay:YES];
+        
+        if(DRAW_STEPS)
+            [NSTimer scheduledTimerWithTimeInterval:0.025f target:self selector:@selector(step:) userInfo:nil repeats:YES];
+        else
+        {
+            while([self Dijkstra]);
+            [self findPath];
+            [self setNeedsDisplay:YES];
+        }
     }
     
     return self;
 }
 
+
+- (void)step:(NSTimer*)timer
+{
+    if(![self Dijkstra])
+    {
+        [timer invalidate];
+        [self findPath];
+    }
+    [self setNeedsDisplay:YES];
+}
+
 - (void)drawRect:(NSRect)dirtyRect
 {
-    NSLog(@"Draw rect!\n");
     // Get the graphics context and clear it
     CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
     CGContextClearRect(ctx, dirtyRect);
@@ -399,7 +436,15 @@ int settledVertCount;
             CGContextSetRGBFillColor(ctx, r, g, b, 1);
             CGContextFillRect(ctx, CGRectMake(x*PIX_W, y*PIX_H, PIX_W, PIX_H));
         }
-
+    
+    
+    char buff[64];
+    CGContextSelectFont(ctx, "Courier", SIZE_FACTOR/3, kCGEncodingMacRoman);
+    CGContextSetTextDrawingMode(ctx, kCGTextFill);
+    CGAffineTransform xform = CGAffineTransformMake(1.0,  0.0,
+                                                    0.0,  1.0,
+                                                    0.0,  0.0);
+    CGContextSetTextMatrix(ctx, xform);
     
     for(int x=0;x<WIDTH;x++)
         for(int y=0;y<HEIGHT;y++)
@@ -407,8 +452,17 @@ int settledVertCount;
             if(thePath[x][y])
             {
                 CGContextSetRGBFillColor(ctx, 1, 1, 0, 1);
-                CGContextFillEllipseInRect(ctx, CGRectMake(x*PIX_W, y*PIX_H, PIX_W, PIX_H));                
+                CGContextFillEllipseInRect(ctx, CGRectMake(x*PIX_W, y*PIX_H, PIX_W, PIX_H));
             }
+            // Draw the text TrailsintheSand.com in light blue
+            if(dist[y*WIDTH+x]>=MAX_DISTANCE)
+                snprintf(buff, 64, "-00-");
+            else if((int)dist[y*WIDTH+x]>=9999)
+                snprintf(buff, 64, "----");
+            else
+                snprintf(buff, 64, "%04d",(int)dist[y*WIDTH+x]);
+            CGContextSetRGBFillColor(ctx, 0, 0, 0, 1);
+            CGContextShowTextAtPoint(ctx, x*PIX_W +SIZE_FACTOR/10 , y*PIX_H + PIX_H/2, buff, strlen(buff));                            
         }
 }
 
