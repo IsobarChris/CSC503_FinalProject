@@ -231,30 +231,47 @@ DPFVert* prev[MAX_VERTS];
 DPFVert* settledVerts[MAX_VERTS];
 int settledVertCount=0;
 
-- (int)extractMinDistanceIndexFromVertsToSearch
+// min heap source drawn from: http://en.wikibooks.org/wiki/Data_Structures/Min_and_Max_Heaps
+#define LEFT(i)  (2*i)
+#define RIGHT(i) (2*i+1)
+- (void)insertVert:(DPFVert*)vert
 {
-    int foundVertIndex = -1;
-    CGFloat minDist = MAX_DISTANCE;
-    
-    for(int i=0;i<unsettledVertCount;i++)
+    unsettledVerts[unsettledVertCount++] = vert;
+    int i = unsettledVertCount-1;
+    while(i>0)
     {
-        DPFVert *vert = unsettledVerts[i];
-        if(minDist > dist[vert->index])
+        if(dist[unsettledVerts[i/2]->index] < dist[unsettledVerts[i]->index])
+            break;
+        DPFVert *temp = unsettledVerts[i/2];
+        unsettledVerts[i/2] = unsettledVerts[i];
+        unsettledVerts[i] = temp;        
+        i/=2;
+    }
+}
+
+- (DPFVert*)removeMinVert
+{
+    DPFVert *savedMinVert = unsettledVerts[0];
+    unsettledVerts[0] = unsettledVerts[--unsettledVertCount];
+    int i=0;
+    while(i<unsettledVertCount)
+    {
+        int minIndex = i;
+        if(LEFT(i)<unsettledVertCount && dist[unsettledVerts[LEFT(i)]->index] < dist[unsettledVerts[minIndex]->index])
+            minIndex = LEFT(i);
+        if(RIGHT(i)<unsettledVertCount && dist[unsettledVerts[RIGHT(i)]->index] < dist[unsettledVerts[minIndex]->index])
+            minIndex = RIGHT(i);
+        if(minIndex!=i)
         {
-            minDist = dist[vert->index];
-            foundVertIndex = i;
+            DPFVert *temp = unsettledVerts[i];
+            unsettledVerts[i] = unsettledVerts[minIndex];
+            unsettledVerts[minIndex] = temp;
+            i = minIndex;
         }
+        else
+            break;
     }
-    
-    if(foundVertIndex>=0)
-    {
-        DPFVert *temp = unsettledVerts[foundVertIndex];
-        unsettledVerts[foundVertIndex] = unsettledVerts[unsettledVertCount-1];
-        unsettledVerts[unsettledVertCount-1] = temp;
-        foundVertIndex = unsettledVertCount-1;
-    }
-    
-    return foundVertIndex;
+    return savedMinVert;
 }
 
 - (void)resetDijkstra
@@ -280,7 +297,7 @@ int settledVertCount=0;
     DPFVert *startVert = allVerts[WIDTH+1];
     int startIndex = startVert->index;
     
-    unsettledVerts[unsettledVertCount++] = allVerts[startIndex];
+    [self insertVert:allVerts[startIndex]];
     dist[startIndex] = 0.0f; // vert 0 is the start point
 }
 
@@ -289,16 +306,13 @@ int settledVertCount=0;
     if(unsettledVertCount==0)
         return NO;
     
-    int qIndex = [self extractMinDistanceIndexFromVertsToSearch];
+    DPFVert *u = [self removeMinVert];
     
     DPFVert *v = NULL;
-    DPFVert *u = unsettledVerts[qIndex];
     int uIndex = u->index;
     if(dist[uIndex]==MAX_DISTANCE)
         return NO;
-    
-    unsettledVerts[qIndex] = NULL;
-    unsettledVertCount--;
+
     settledVerts[settledVertCount++] = u;
     
     if(u->x==WIDTH-2 && u->y==HEIGHT-2)
@@ -328,7 +342,7 @@ int settledVertCount=0;
         {
             dist[vIndex] = dist[uIndex] + distToV;
             prev[vIndex] = u;
-            unsettledVerts[unsettledVertCount++] = v;
+            [self insertVert:v];
             //NSLog(@"Adding   Vert %04d @(%d,%d) to unsettledVerts(%d).",v->index,v->x,v->y,unsettledVertCount);
         }
     }
@@ -398,7 +412,12 @@ int settledVertCount=0;
             [NSTimer scheduledTimerWithTimeInterval:0.025f target:self selector:@selector(step:) userInfo:nil repeats:YES];
         else
         {
+            clock_t startTime, endTime;
+            float ratio = 1./CLOCKS_PER_SEC;
+            startTime = clock();
             while([self Dijkstra]);
+            endTime = clock();
+            printf("With %d verts and %d edges, finished in %0.4f seconds.\n",MAX_VERTS,MAX_VERTS*DIRECTIONS,ratio*(long)endTime - ratio*(long)startTime);
             [self findPath];
             [self setNeedsDisplay:YES];
         }
