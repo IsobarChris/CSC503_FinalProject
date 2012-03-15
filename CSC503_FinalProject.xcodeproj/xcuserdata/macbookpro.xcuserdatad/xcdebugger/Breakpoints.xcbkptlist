@@ -7,13 +7,39 @@
          shouldBeEnabled = "Yes"
          ignoreCount = "0"
          continueAfterRunningActions = "No"
-         filePath = "CSC503_FinalProject/DPFApplication.m"
-         timestampString = "353125650.405869"
+         filePath = "CSC503_FinalProject/DPFTerrainView.m"
+         timestampString = "353487350.476582"
          startingColumnNumber = "9223372036854775807"
          endingColumnNumber = "9223372036854775807"
-         startingLineNumber = "17"
-         endingLineNumber = "17"
-         landmarkName = "-awakeFromNib"
+         startingLineNumber = "544"
+         endingLineNumber = "544"
+         landmarkName = "-DijkstraP2"
+         landmarkType = "5">
+      </FileBreakpoint>
+      <FileBreakpoint
+         shouldBeEnabled = "Yes"
+         ignoreCount = "0"
+         continueAfterRunningActions = "No"
+         filePath = "CSC503_FinalProject/DPFTerrainView.m"
+         timestampString = "353487419.377992"
+         startingColumnNumber = "9223372036854775807"
+         endingColumnNumber = "9223372036854775807"
+         startingLineNumber = "472"
+         endingLineNumber = "472"
+         landmarkName = "-DijkstraP2"
+         landmarkType = "5">
+      </FileBreakpoint>
+      <FileBreakpoint
+         shouldBeEnabled = "Yes"
+         ignoreCount = "0"
+         continueAfterRunningActions = "No"
+         filePath = "CSC503_FinalProject/DPFTerrainView.m"
+         timestampString = "353487500.726362"
+         startingColumnNumber = "9223372036854775807"
+         endingColumnNumber = "9223372036854775807"
+         startingLineNumber = "502"
+         endingLineNumber = "502"
+         landmarkName = "-DijkstraP2"
          landmarkType = "5">
       </FileBreakpoint>
    </FileBreakpoints>

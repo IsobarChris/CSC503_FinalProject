@@ -16,6 +16,7 @@
 		527DD4E9150C4418003759E8 /* DPFApplication.m in Sources */ = {isa = PBXBuildFile; fileRef = 527DD4E8150C4418003759E8 /* DPFApplication.m */; };
 		527DD4EC150C4589003759E8 /* DPFTerrainView.m in Sources */ = {isa = PBXBuildFile; fileRef = 527DD4EB150C4589003759E8 /* DPFTerrainView.m */; };
 		527DD4EE150C462D003759E8 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 527DD4ED150C462D003759E8 /* QuartzCore.framework */; };
+		5298DE501511C8A600332464 /* OpenCL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5298DE4F1511C8A600332464 /* OpenCL.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +38,7 @@
 		527DD4EA150C4589003759E8 /* DPFTerrainView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DPFTerrainView.h; sourceTree = "<group>"; };
 		527DD4EB150C4589003759E8 /* DPFTerrainView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DPFTerrainView.m; sourceTree = "<group>"; };
 		527DD4ED150C462D003759E8 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		5298DE4F1511C8A600332464 /* OpenCL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenCL.framework; path = System/Library/Frameworks/OpenCL.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -44,6 +46,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5298DE501511C8A600332464 /* OpenCL.framework in Frameworks */,
 				527DD4EE150C462D003759E8 /* QuartzCore.framework in Frameworks */,
 				527DD4CB150C3E5F003759E8 /* Cocoa.framework in Frameworks */,
 			);
@@ -55,7 +58,6 @@
 		527DD4BB150C3E5E003759E8 = {
 			isa = PBXGroup;
 			children = (
-				527DD4ED150C462D003759E8 /* QuartzCore.framework */,
 				527DD4D0150C3E5F003759E8 /* CSC503_FinalProject */,
 				527DD4C9150C3E5F003759E8 /* Frameworks */,
 				527DD4C7150C3E5F003759E8 /* Products */,
@@ -73,6 +75,8 @@
 		527DD4C9150C3E5F003759E8 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				5298DE4F1511C8A600332464 /* OpenCL.framework */,
+				527DD4ED150C462D003759E8 /* QuartzCore.framework */,
 				527DD4CA150C3E5F003759E8 /* Cocoa.framework */,
 				527DD4CC150C3E5F003759E8 /* Other Frameworks */,
 			);
@@ -305,6 +309,7 @@
 				527DD4E6150C3E5F003759E8 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

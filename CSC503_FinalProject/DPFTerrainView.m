@@ -8,6 +8,7 @@
 
 #import "DPFTerrainView.h"
 #import <QuartzCore/QuartzCore.h>
+#include <OpenCL/opencl.h>
 
 // size 8, seed 5
 // size 4, seed 6
@@ -441,6 +442,109 @@ static dispatch_queue_t queue = NULL;
     return YES;
 }
 
+
+//"   __global int*  A,                       \n" \
+"   const unsigned int len)                 \n" \
+
+const char *kernelSource = "\n" \
+"__kernel void dijkstraWork(                \n" \
+"void)                                      \n" \
+"{                                          \n" \
+"   int k = get_global_id(0);               \n" \
+"   printf((const char*)\"openCL! %d\\n\",k);\n" \
+"}                                          \n" \
+"\n";
+
+-(BOOL)DijkstraP2
+{
+    int len = 8;
+    int err;                            // error code returned from api calls
+    size_t global;                      // global domain size for our calculation
+    size_t local;                       // local domain size for our calculation
+    cl_device_id device_id;             // compute device id 
+    cl_context context;                 // compute context
+    cl_command_queue commands;          // compute command queue
+    cl_program program;                 // compute program
+    cl_kernel kernel;                   // compute kernel
+    cl_mem input;                       // device memory used for the input array
+    
+    // Connect to a compute device
+    int gpu = 0;
+    err = clGetDeviceIDs(NULL, gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to create a device group! %d\n",err); return NO; }
+    
+    // Create a compute context 
+    context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
+    if (!context) { printf("Error: Failed to create a compute context!\n"); return NO; }
+    
+    // Create a command commands
+    commands = clCreateCommandQueue(context, device_id, 0, &err);
+    if (!commands) { printf("Error: Failed to create a command commands!\n"); return NO; }
+    
+    // Create the compute program from the source buffer
+    program = clCreateProgramWithSource(context, 1, (const char **) & kernelSource, NULL, &err);
+    if (!program) { printf("Error: Failed to create compute program!\n"); return NO; }
+    
+    // Build the program executable
+    err = clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
+    if (err != CL_SUCCESS)
+    {
+        size_t len;
+        char buffer[2048];
+        
+        printf("Error: Failed to build program executable!\n");
+        clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);
+        printf("%s\n", buffer);
+        return NO;
+    }
+    
+    // Create the compute kernel in the program we wish to run
+    kernel = clCreateKernel(program, "dijkstraWork", &err);
+    if (!kernel || err != CL_SUCCESS) { printf("Error: Failed to create compute kernel!\n"); return NO; }
+    
+    // Create the array in device memory for the sort
+    input = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(int) * len, NULL, NULL);
+    if (!input) { printf("Error: Failed to allocate device memory!\n"); return NO; }    
+    
+    // Write our data set into the input array in device memory 
+    //err = clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, sizeof(int) * len, A, 0, NULL, NULL);
+    //if (err != CL_SUCCESS) { printf("Error: Failed to write to source array!\n"); return NO; }
+    
+    // Get the maximum work group size for executing the kernel on the device
+    err = clGetKernelWorkGroupInfo(kernel, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(local), &local, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to retrieve kernel work group info! %d\n", err); return NO; }
+    
+    global = 8;
+    if(local>global)
+        local = global;
+    
+    // Execute the kernel
+    err  = 0;
+    //err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &input);
+    //err |= clSetKernelArg(kernel, 1, sizeof(unsigned int), &len);
+    if (err != CL_SUCCESS) { printf("Error: Failed to set kernel arguments! %d\n", err); return NO; }
+    
+    err = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, &global, &local, 0, NULL, NULL);
+    if (err) { printf("Error: Failed to execute kernel (%d)!\n",err); return EXIT_FAILURE; } 
+    
+    // Wait for all the commands to get serviced before reading back results
+    clFinish(commands);
+    
+    // Read back the results from the device to verify the output
+    //err = clEnqueueReadBuffer( commands, input, CL_TRUE, 0, sizeof(int) * len, A, 0, NULL, NULL );  
+    //if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d\n", err); return NO; }
+    
+    // Shutdown and cleanup
+    clReleaseMemObject(input);
+    clReleaseProgram(program);
+    clReleaseKernel(kernel);
+    clReleaseCommandQueue(commands);
+    clReleaseContext(context);
+    
+    return NO;
+}
+
+
 - (void)findPath
 {
     for(int x=0;x<WIDTH;x++)
@@ -506,7 +610,7 @@ static dispatch_queue_t queue = NULL;
             clock_t startTime, endTime;
             float ratio = 1./CLOCKS_PER_SEC;
             startTime = clock();
-            while([self DijkstraP1]);
+            while([self DijkstraP2]);
             endTime = clock();
             printf("With %d verts and %d edges, finished in %0.4f seconds.\n",MAX_VERTS,MAX_VERTS*DIRECTIONS,ratio*(long)endTime - ratio*(long)startTime);
             [self findPath];
