@@ -15,11 +15,11 @@
 
 #define DRAW_STEPS 0
 
-#define SIZE_FACTOR 8  // can be 1,2,4,8
+#define SIZE_FACTOR 2.0f  // can be 1,2,4,8
 #define MAP_SEED    5
 
-#define WIDTH  ((int)(1024/SIZE_FACTOR))
-#define HEIGHT  ((int)(768/SIZE_FACTOR))
+#define WIDTH  ((int)(1024.0f/SIZE_FACTOR))
+#define HEIGHT  ((int)(768.0f/SIZE_FACTOR))
 #define DIRECTIONS 8  // can be 4 or 8  
 
 #define DIR_N  0
