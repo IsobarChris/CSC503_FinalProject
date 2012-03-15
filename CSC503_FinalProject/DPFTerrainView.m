@@ -247,8 +247,48 @@ int settledVertCount=0;
         unsettledVerts[i] = temp;        
         i/=2;
     }
+    
+    if(1)
+    {
+        for(int k=0;k<100;k++)
+            for(int i=0;i<100;i++)
+                   slowDown = k * i;                            
+        
+    }
 }
 
+dispatch_semaphore_t semaphore = NULL;
+- (void)insertVertP1:(DPFVert*)vert
+{
+    if(semaphore==NULL)
+         semaphore = dispatch_semaphore_create(1);
+    
+    dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+    //NSLog(@"insert %d start",vert->index);
+    unsettledVerts[unsettledVertCount++] = vert;
+    int i = unsettledVertCount-1;
+    while(i>0)
+    {
+        if(dist[unsettledVerts[i/2]->index] < dist[unsettledVerts[i]->index])
+            break;
+        DPFVert *temp = unsettledVerts[i/2];
+        unsettledVerts[i/2] = unsettledVerts[i];
+        unsettledVerts[i] = temp;        
+        i/=2;
+    }
+    
+    if(1)
+    {
+        for(int k=0;k<100;k++)
+            for(int i=0;i<100;i++)
+                slowDown = k * i;                            
+        
+    }
+    //NSLog(@"insert %d end",vert->index);
+    dispatch_semaphore_signal(semaphore);
+}
+
+static int slowDown;
 - (DPFVert*)removeMinVert
 {
     DPFVert *savedMinVert = unsettledVerts[0];
@@ -271,6 +311,7 @@ int settledVertCount=0;
         else
             break;
     }
+    
     return savedMinVert;
 }
 
@@ -304,7 +345,7 @@ int settledVertCount=0;
 - (BOOL)Dijkstra
 {
     if(unsettledVertCount==0)
-        return NO;
+        return NO; // nothing to do
     
     DPFVert *u = [self removeMinVert];
     
@@ -313,26 +354,23 @@ int settledVertCount=0;
     if(dist[uIndex]==MAX_DISTANCE)
         return NO;
 
+    // Add this node to the list of settled verts, it's as short as it gets
     settledVerts[settledVertCount++] = u;
     
+    // This is the end node, we're done
     if(u->x==WIDTH-2 && u->y==HEIGHT-2)
         return NO;
     
-    //u->inPath = YES;
-    //NSLog(@"Removing Vert %04d @(%d,%d) from unsettledVerts(%d) to settledVerts(%d).",u->index,u->x,u->y,unsettledVertCount,settledVertCount);
-    
-    // check each adjacent vert
+    // check each adjacent vert, there are 4 or 8 edges (based on the directions define), check them all
     for(int d=0;d<DIRECTIONS;d++)
     {
         int xOff = u->x+xOffsetForDirection(d);
         int yOff = u->y+yOffsetForDirection(d);
         if(xOff<0 || yOff<0 || xOff>=WIDTH || yOff>=HEIGHT)
-            continue;
+            continue; // off the grid, ignore this edge
         
         v = &map[xOff][yOff];
         int vIndex = v->index;
-        //if(v->inPath)
-        //    continue;
         
         CGFloat distToV = terrainMovementPoints(v->terrain);
         if(u->x!=v->x && u->y!=v->y)
@@ -343,9 +381,62 @@ int settledVertCount=0;
             dist[vIndex] = dist[uIndex] + distToV;
             prev[vIndex] = u;
             [self insertVert:v];
-            //NSLog(@"Adding   Vert %04d @(%d,%d) to unsettledVerts(%d).",v->index,v->x,v->y,unsettledVertCount);
         }
     }
+    
+    return YES;
+}
+
+static dispatch_queue_t queue = NULL;
+
+- (BOOL)DijkstraP1
+{
+    if(unsettledVertCount==0)
+        return NO; // nothing to do
+    
+    if(!queue)
+        queue = dispatch_queue_create("Direction Concurrent Queue", DISPATCH_QUEUE_CONCURRENT);
+    
+    DPFVert *u = [self removeMinVert];
+    
+    int uIndex = u->index;
+    if(dist[uIndex]==MAX_DISTANCE)
+        return NO;
+    
+    // Add this node to the list of settled verts, it's as short as it gets
+    settledVerts[settledVertCount++] = u;
+    
+    // This is the end node, we're done
+    if(u->x==WIDTH-2 && u->y==HEIGHT-2)
+        return NO;
+    
+    dispatch_apply(8, queue, ^(size_t d) 
+    {
+        //NSLog(@"Hi %d",(int)d);
+        
+        int xOff = u->x+xOffsetForDirection(d);
+        int yOff = u->y+yOffsetForDirection(d);
+        if(xOff<0 || yOff<0 || xOff>=WIDTH || yOff>=HEIGHT)
+            return; // off the grid, ignore this edge
+        
+        DPFVert *v = &map[xOff][yOff];
+        int vIndex = v->index;
+        
+        CGFloat distToV = terrainMovementPoints(v->terrain);
+        if(u->x!=v->x && u->y!=v->y)
+            distToV *= 1.4;
+        
+        if(dist[vIndex] > dist[uIndex] + distToV)
+        {
+            dist[vIndex] = dist[uIndex] + distToV;
+            prev[vIndex] = u;
+            [self insertVertP1:v];
+        }
+        
+        //sleep(rand()%4);
+        
+        //NSLog(@"Bye %d",(int)d);
+    });
     
     return YES;
 }
@@ -415,7 +506,7 @@ int settledVertCount=0;
             clock_t startTime, endTime;
             float ratio = 1./CLOCKS_PER_SEC;
             startTime = clock();
-            while([self Dijkstra]);
+            while([self DijkstraP1]);
             endTime = clock();
             printf("With %d verts and %d edges, finished in %0.4f seconds.\n",MAX_VERTS,MAX_VERTS*DIRECTIONS,ratio*(long)endTime - ratio*(long)startTime);
             [self findPath];
