@@ -8,6 +8,7 @@
 
 #import "DPFTerrainView.h"
 #import <QuartzCore/QuartzCore.h>
+#include <OpenCL/opencl.h>
 
 // size 8, seed 5
 // size 4, seed 6
@@ -247,8 +248,48 @@ int settledVertCount=0;
         unsettledVerts[i] = temp;        
         i/=2;
     }
+    
+    if(1)
+    {
+        for(int k=0;k<100;k++)
+            for(int i=0;i<100;i++)
+                   slowDown = k * i;                            
+        
+    }
 }
 
+dispatch_semaphore_t semaphore = NULL;
+- (void)insertVertP1:(DPFVert*)vert
+{
+    if(semaphore==NULL)
+         semaphore = dispatch_semaphore_create(1);
+    
+    dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+    //NSLog(@"insert %d start",vert->index);
+    unsettledVerts[unsettledVertCount++] = vert;
+    int i = unsettledVertCount-1;
+    while(i>0)
+    {
+        if(dist[unsettledVerts[i/2]->index] < dist[unsettledVerts[i]->index])
+            break;
+        DPFVert *temp = unsettledVerts[i/2];
+        unsettledVerts[i/2] = unsettledVerts[i];
+        unsettledVerts[i] = temp;        
+        i/=2;
+    }
+    
+    if(1)
+    {
+        for(int k=0;k<100;k++)
+            for(int i=0;i<100;i++)
+                slowDown = k * i;                            
+        
+    }
+    //NSLog(@"insert %d end",vert->index);
+    dispatch_semaphore_signal(semaphore);
+}
+
+static int slowDown;
 - (DPFVert*)removeMinVert
 {
     DPFVert *savedMinVert = unsettledVerts[0];
@@ -271,6 +312,7 @@ int settledVertCount=0;
         else
             break;
     }
+    
     return savedMinVert;
 }
 
@@ -304,7 +346,7 @@ int settledVertCount=0;
 - (BOOL)Dijkstra
 {
     if(unsettledVertCount==0)
-        return NO;
+        return NO; // nothing to do
     
     DPFVert *u = [self removeMinVert];
     
@@ -313,26 +355,23 @@ int settledVertCount=0;
     if(dist[uIndex]==MAX_DISTANCE)
         return NO;
 
+    // Add this node to the list of settled verts, it's as short as it gets
     settledVerts[settledVertCount++] = u;
     
+    // This is the end node, we're done
     if(u->x==WIDTH-2 && u->y==HEIGHT-2)
         return NO;
     
-    //u->inPath = YES;
-    //NSLog(@"Removing Vert %04d @(%d,%d) from unsettledVerts(%d) to settledVerts(%d).",u->index,u->x,u->y,unsettledVertCount,settledVertCount);
-    
-    // check each adjacent vert
+    // check each adjacent vert, there are 4 or 8 edges (based on the directions define), check them all
     for(int d=0;d<DIRECTIONS;d++)
     {
         int xOff = u->x+xOffsetForDirection(d);
         int yOff = u->y+yOffsetForDirection(d);
         if(xOff<0 || yOff<0 || xOff>=WIDTH || yOff>=HEIGHT)
-            continue;
+            continue; // off the grid, ignore this edge
         
         v = &map[xOff][yOff];
         int vIndex = v->index;
-        //if(v->inPath)
-        //    continue;
         
         CGFloat distToV = terrainMovementPoints(v->terrain);
         if(u->x!=v->x && u->y!=v->y)
@@ -343,12 +382,168 @@ int settledVertCount=0;
             dist[vIndex] = dist[uIndex] + distToV;
             prev[vIndex] = u;
             [self insertVert:v];
-            //NSLog(@"Adding   Vert %04d @(%d,%d) to unsettledVerts(%d).",v->index,v->x,v->y,unsettledVertCount);
         }
     }
     
     return YES;
 }
+
+static dispatch_queue_t queue = NULL;
+
+- (BOOL)DijkstraP1
+{
+    if(unsettledVertCount==0)
+        return NO; // nothing to do
+    
+    if(!queue)
+        queue = dispatch_queue_create("Direction Concurrent Queue", DISPATCH_QUEUE_CONCURRENT);
+    
+    DPFVert *u = [self removeMinVert];
+    
+    int uIndex = u->index;
+    if(dist[uIndex]==MAX_DISTANCE)
+        return NO;
+    
+    // Add this node to the list of settled verts, it's as short as it gets
+    settledVerts[settledVertCount++] = u;
+    
+    // This is the end node, we're done
+    if(u->x==WIDTH-2 && u->y==HEIGHT-2)
+        return NO;
+    
+    dispatch_apply(8, queue, ^(size_t d) 
+    {
+        //NSLog(@"Hi %d",(int)d);
+        
+        int xOff = u->x+xOffsetForDirection(d);
+        int yOff = u->y+yOffsetForDirection(d);
+        if(xOff<0 || yOff<0 || xOff>=WIDTH || yOff>=HEIGHT)
+            return; // off the grid, ignore this edge
+        
+        DPFVert *v = &map[xOff][yOff];
+        int vIndex = v->index;
+        
+        CGFloat distToV = terrainMovementPoints(v->terrain);
+        if(u->x!=v->x && u->y!=v->y)
+            distToV *= 1.4;
+        
+        if(dist[vIndex] > dist[uIndex] + distToV)
+        {
+            dist[vIndex] = dist[uIndex] + distToV;
+            prev[vIndex] = u;
+            [self insertVertP1:v];
+        }
+        
+        //sleep(rand()%4);
+        
+        //NSLog(@"Bye %d",(int)d);
+    });
+    
+    return YES;
+}
+
+
+//"   __global int*  A,                       \n" \
+"   const unsigned int len)                 \n" \
+
+const char *kernelSource = "\n" \
+"__kernel void dijkstraWork(                \n" \
+"void)                                      \n" \
+"{                                          \n" \
+"   int k = get_global_id(0);               \n" \
+"   printf((const char*)\"openCL! %d\\n\",k);\n" \
+"}                                          \n" \
+"\n";
+
+-(BOOL)DijkstraP2
+{
+    int len = 8;
+    int err;                            // error code returned from api calls
+    size_t global;                      // global domain size for our calculation
+    size_t local;                       // local domain size for our calculation
+    cl_device_id device_id;             // compute device id 
+    cl_context context;                 // compute context
+    cl_command_queue commands;          // compute command queue
+    cl_program program;                 // compute program
+    cl_kernel kernel;                   // compute kernel
+    cl_mem input;                       // device memory used for the input array
+    
+    // Connect to a compute device
+    int gpu = 0;
+    err = clGetDeviceIDs(NULL, gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to create a device group! %d\n",err); return NO; }
+    
+    // Create a compute context 
+    context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
+    if (!context) { printf("Error: Failed to create a compute context!\n"); return NO; }
+    
+    // Create a command commands
+    commands = clCreateCommandQueue(context, device_id, 0, &err);
+    if (!commands) { printf("Error: Failed to create a command commands!\n"); return NO; }
+    
+    // Create the compute program from the source buffer
+    program = clCreateProgramWithSource(context, 1, (const char **) & kernelSource, NULL, &err);
+    if (!program) { printf("Error: Failed to create compute program!\n"); return NO; }
+    
+    // Build the program executable
+    err = clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
+    if (err != CL_SUCCESS)
+    {
+        size_t len;
+        char buffer[2048];
+        
+        printf("Error: Failed to build program executable!\n");
+        clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);
+        printf("%s\n", buffer);
+        return NO;
+    }
+    
+    // Create the compute kernel in the program we wish to run
+    kernel = clCreateKernel(program, "dijkstraWork", &err);
+    if (!kernel || err != CL_SUCCESS) { printf("Error: Failed to create compute kernel!\n"); return NO; }
+    
+    // Create the array in device memory for the sort
+    input = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(int) * len, NULL, NULL);
+    if (!input) { printf("Error: Failed to allocate device memory!\n"); return NO; }    
+    
+    // Write our data set into the input array in device memory 
+    //err = clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, sizeof(int) * len, A, 0, NULL, NULL);
+    //if (err != CL_SUCCESS) { printf("Error: Failed to write to source array!\n"); return NO; }
+    
+    // Get the maximum work group size for executing the kernel on the device
+    err = clGetKernelWorkGroupInfo(kernel, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(local), &local, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to retrieve kernel work group info! %d\n", err); return NO; }
+    
+    global = 8;
+    if(local>global)
+        local = global;
+    
+    // Execute the kernel
+    err  = 0;
+    //err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &input);
+    //err |= clSetKernelArg(kernel, 1, sizeof(unsigned int), &len);
+    if (err != CL_SUCCESS) { printf("Error: Failed to set kernel arguments! %d\n", err); return NO; }
+    
+    err = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, &global, &local, 0, NULL, NULL);
+    if (err) { printf("Error: Failed to execute kernel (%d)!\n",err); return EXIT_FAILURE; } 
+    
+    // Wait for all the commands to get serviced before reading back results
+    clFinish(commands);
+    
+    // Read back the results from the device to verify the output
+    //err = clEnqueueReadBuffer( commands, input, CL_TRUE, 0, sizeof(int) * len, A, 0, NULL, NULL );  
+    //if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d\n", err); return NO; }
+    
+    // Shutdown and cleanup
+    clReleaseMemObject(input);
+    clReleaseProgram(program);
+    clReleaseKernel(kernel);
+    clReleaseCommandQueue(commands);
+    clReleaseContext(context);
+    
+    return NO;
+}
+
 
 - (void)findPath
 {
@@ -415,7 +610,7 @@ int settledVertCount=0;
             clock_t startTime, endTime;
             float ratio = 1./CLOCKS_PER_SEC;
             startTime = clock();
-            while([self Dijkstra]);
+            while([self DijkstraP2]);
             endTime = clock();
             printf("With %d verts and %d edges, finished in %0.4f seconds.\n",MAX_VERTS,MAX_VERTS*DIRECTIONS,ratio*(long)endTime - ratio*(long)startTime);
             [self findPath];
