@@ -17,7 +17,7 @@
 #define DRAW_STEPS 0
 
 #define SIZE_FACTOR 2.0f  // can be 1,2,4,8
-#define MAP_SEED    5
+#define MAP_SEED    9
 
 #define WIDTH  ((int)(1024.0f/SIZE_FACTOR))
 #define HEIGHT  ((int)(768.0f/SIZE_FACTOR))
@@ -413,8 +413,6 @@ static dispatch_queue_t queue = NULL;
     
     dispatch_apply(8, queue, ^(size_t d) 
     {
-        //NSLog(@"Hi %d",(int)d);
-        
         int xOff = u->x+xOffsetForDirection(d);
         int yOff = u->y+yOffsetForDirection(d);
         if(xOff<0 || yOff<0 || xOff>=WIDTH || yOff>=HEIGHT)
@@ -433,10 +431,6 @@ static dispatch_queue_t queue = NULL;
             prev[vIndex] = u;
             [self insertVertP1:v];
         }
-        
-        //sleep(rand()%4);
-        
-        //NSLog(@"Bye %d",(int)d);
     });
     
     return YES;
@@ -683,5 +677,6 @@ const char *kernelSource = "\n" \
             }
         }
 }
+
 
 @end
