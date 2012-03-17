@@ -455,67 +455,189 @@ typedef struct
     DPFTerrain terrain;
     char       shouldProcess;
     float      distanceFromSource;
+    int        nearestNeighborIndex;
 }DPFNode;
 
 DPFNode altMap[MAX_VERTS];
 
--(void)setupAltMap
+- (void)findAltPath
 {
+    NSLog(@"Finding Path...");
+    
+    int currentIndex = (HEIGHT-1)*WIDTH-2;
     for(int i=0;i<WIDTH*HEIGHT;i++)
     {
-        altMap[i].terrain = DPFTerrainGround;
-        altMap[i].shouldProcess = 1;
-        altMap[i].distanceFromSource = MAX_DISTANCE;
+        dist[i] = altMap[i].distanceFromSource;
+        thePath[i] = NO;
+    }
+
+    thePath[WIDTH+1] = YES;
+    thePath[currentIndex] = YES;
+    
+    /*
+    while(currentIndex != WIDTH+1)
+    {
+        currentIndex = altMap[currentIndex].nearestNeighborIndex;
+        thePath[currentIndex] = YES;
+    }
+    */
+    
+    NSLog(@"Done finding path.");
+     
+    if(0)
+    {
+        //printf("Current Index: %d,%d\n",currentIndex%WIDTH,currentIndex/WIDTH); 
+
+        int minIndex = currentIndex;
+        float minDistance = MAX_DISTANCE;
+        
+        for(int x=-1;x<2;x++)
+            for(int y=-1;y<2;y++)
+                if(x || y)
+                {
+                    int neighborIndex = currentIndex + y*WIDTH+x;
+                    //printf("  Checking Index: %d,%d  (%0.1f)\n",neighborIndex%WIDTH,neighborIndex/WIDTH,altMap[neighborIndex].distanceFromSource);
+                    
+                    if(altMap[neighborIndex].distanceFromSource < minDistance)
+                    {
+                        minIndex = neighborIndex;
+                        minDistance = altMap[neighborIndex].distanceFromSource;
+                    }
+                }
+        
+        //printf("  Selecting Index: %d,%d  (%0.1f)\n",minIndex%WIDTH,minIndex/WIDTH,altMap[minIndex].distanceFromSource);
+        thePath[minIndex] = YES;
+        currentIndex = minIndex;
     }
 }
 
+-(void)setupAltDijkstra
+{
+    for(int i=0;i<WIDTH*HEIGHT;i++)
+    {
+        altMap[i].terrain = map[i].terrain;
+        altMap[i].shouldProcess = 1;
+        altMap[i].distanceFromSource = MAX_DISTANCE;
+        altMap[i].nearestNeighborIndex = i; // set to self for now
+    }
+    
+    altMap[WIDTH+1].distanceFromSource = 0;
+}
+
 const char *altKernelSource = "\n" \
-"                                           \n" \
-"typedef struct                             \n" \
-"{                                          \n" \
-"    int        terrain;                    \n" \
-"    char       shouldProcess;              \n" \
-"    float      distanceFromSource;         \n" \
-"}DPFNode;                                  \n" \
-"                                           \n" \
-"__kernel void altDijkstraWork(             \n" \
-"__global DPFNode* Grid,                    \n" \
-"__global int*     done                     \n" \
-"                          )                \n" \
-"{                                          \n" \
-"   int k = get_global_id(0);               \n" \
-"   //printf((const char*)\"Alt %d (%d %d %0.1f)\\n\",k,Grid[k].terrain,Grid[k].shouldProcess,Grid[k].distanceFromSource);\n" \
-"   if(Grid[k].shouldProcess)               \n" \
-"   {                                       \n" \
-"      *done = 0;                           \n" \
-"                                           \n" \
-"      Grid[k].shouldProcess = 0;           \n" \
-"   }                                       \n" \
-"}                                          \n" \
+"                                                                                      \n" \
+"typedef struct                                                                        \n" \
+"{                                                                                     \n" \
+"    int        terrain;                                                               \n" \
+"    char       shouldProcess;                                                         \n" \
+"    float      distanceFromSource;                                                    \n" \
+"    int        nearestNeighborIndex;                                                  \n" \
+"}DPFNode;                                                                             \n" \
+"                                                                                      \n" \
+"  float terrainMovementPoints(int terrain)                                            \n" \
+"  {                                                                                   \n" \
+"      switch (terrain)                                                                \n" \
+"      {                                                                               \n" \
+"          case 0: return 9999.0;                                                      \n" \
+"          case 2: return 1.0;                                                         \n" \
+"          case 3: return 2.0;                                                         \n" \
+"          case 1: return 8.0;                                                         \n" \
+"          case 4: return 3.0;                                                         \n" \
+"          case 5: return 5.0;                                                         \n" \
+"          case 6: return 4.0;                                                         \n" \
+"          default: return 9999.0;                                                     \n" \
+"      }                                                                               \n" \
+"      return 9999.0;                                                                  \n" \
+"  }                                                                                   \n" \
+"                                                                                      \n" \
+"                                                                                      \n" \
+"__kernel void altDijkstraWork(                                                        \n" \
+"__global DPFNode* Grid,                                                               \n" \
+"  const  int      width,                                                              \n" \
+"  const  int      height,                                                             \n" \
+"__global int*     done                                                                \n" \
+"                          )                                                           \n" \
+"{                                                                                     \n" \
+"   int k = get_global_id(0);                                                          \n" \
+"                                                                                      \n" \
+"   if(Grid[k].shouldProcess)                                                          \n" \
+"   {                                                                                  \n" \
+"    *done = 0;                                                                        \n" \
+"                                                                                      \n" \
+"    int notifyNeighbors = 0;                                                          \n" \
+"    for(int x=-1;x<2;x++)                                                             \n" \
+"        for(int y=-1;y<2;y++)                                                         \n" \
+"            if(x || y)                                                                \n" \
+"            {                                                                         \n" \
+"                int index = k+y*width+x;                                              \n" \
+"                if(index>0 && index<width*height)                                     \n" \
+"                {                                                                     \n" \
+"                    float newDistance = Grid[index].distanceFromSource;               \n" \
+"                    if(x!=0 && y!=0) // diagonal movement                             \n" \
+"                        newDistance += (terrainMovementPoints(Grid[k].terrain)*1.41); \n" \
+"                    else                                                              \n" \
+"                        newDistance += terrainMovementPoints(Grid[k].terrain);        \n" \
+"                    if(newDistance < Grid[k].distanceFromSource)                      \n" \
+"                    {                                                                 \n" \
+"                        Grid[k].distanceFromSource = newDistance;                     \n" \
+"                        Grid[k].nearestNeighborIndex = index;                         \n" \
+"                        notifyNeighbors = 1;                                          \n" \
+"                    }                                                                 \n" \
+"                }                                                                     \n" \
+"            }                                                                         \n" \
+"                                                                                      \n" \
+"    if(notifyNeighbors)                                                               \n" \
+"        for(int x=-1;x<2;x++)                                                         \n" \
+"            for(int y=-1;y<2;y++)                                                     \n" \
+"                if(x || y)                                                            \n" \
+"                {                                                                     \n" \
+"                    int index = k+y*width+x;                                          \n" \
+"                    if(index>0 && index<width*height)                                 \n" \
+"                        Grid[index].shouldProcess = 1;                                \n" \
+"                }                                                                     \n" \
+"                                                                                      \n" \
+"    Grid[k].shouldProcess = 0;                                                        \n" \
+"   }                                                                                  \n" \
+"}                                                                                     \n" \
 "\n";
 
-/*
-for(int x=-1;x<2;x++)
-for(int y=-1;y<2;y++)
-if(x && y)
+void blah(DPFNode *Grid,int done)
 {
-    // TODO - find lowest distance neighbor
-    //      - if neighbor distance + our cost < current cost, update and tell the neighbors
-    int index = k+y*WIDTH+x;
-    if(index>0 && index<WIDTH*HEIGHT)
-        Grid[index].shouldProcess = 1;
-}
+    int k=0;
+    
+    int notifyNeighbors = 0;
+    for(int x=-1;x<2;x++)
+        for(int y=-1;y<2;y++)
+            if(x || y)
+            {
+                int index = k+y*WIDTH+x;
+                if(index>0 && index<WIDTH*HEIGHT)
+                {
+                    float newDistance = Grid[index].distanceFromSource;
+                    if(x!=0 && y!=0) // diagonal movement
+                        newDistance += (terrainMovementPoints(Grid[k].terrain)*1.41);
+                    else
+                        newDistance += terrainMovementPoints(Grid[k].terrain);
+                    if(newDistance < Grid[k].distanceFromSource)
+                    {
+                        Grid[k].distanceFromSource = newDistance;
+                        notifyNeighbors = 1;
+                    }
+                }
+            }
+    
+    if(notifyNeighbors)
+        for(int x=-1;x<2;x++)
+            for(int y=-1;y<2;y++)
+                if(x || y)
+                {
+                    int index = k+y*WIDTH+x;
+                    if(index>0 && index<WIDTH*HEIGHT)
+                        Grid[index].shouldProcess = 1;
+                }
+    
 
-
-for(int x=-1;x<2;x++)
-for(int y=-1;y<2;y++)
-if(x && y)
-{
-    int index = k+y*WIDTH+x;
-    if(index>0 && index<WIDTH*HEIGHT)
-        Grid[index].shouldProcess = 1;
 }
-*/
 
 
 -(BOOL)AltDijkstra
@@ -589,6 +711,8 @@ if(x && y)
     //global = 1;
     //local = 1;
     
+    int width = WIDTH;
+    int height = HEIGHT;
     while(!done)
     {
         done = 1;
@@ -600,7 +724,9 @@ if(x && y)
         // Execute the kernel
         err  = 0;
         err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &localMap);
-        err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &doneBuf);
+        err |= clSetKernelArg(kernel, 1, sizeof(int), &width);
+        err |= clSetKernelArg(kernel, 2, sizeof(int), &height);
+        err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &doneBuf);
         if (err != CL_SUCCESS) { printf("Error: Failed to set kernel arguments! %d\n", err); return NO; }
         
         err = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, &global, &local, 0, NULL, NULL);
@@ -613,15 +739,15 @@ if(x && y)
         err = clEnqueueReadBuffer( commands, doneBuf, CL_TRUE, 0, sizeof(int), &done, 0, NULL, NULL );  
         if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d\n", err); return NO; }  
         
-        NSLog(@"Done = %d",done);
+        //NSLog(@"Done = %d",done);
     }
 
     // Read back the results from the device to verify the output
     err = clEnqueueReadBuffer( commands, localMap, CL_TRUE, 0, sizeof(DPFNode) * WIDTH * HEIGHT, altMap, 0, NULL, NULL );  
     if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d\n", err); return NO; }
     
-    for(int i=0;i<20;i++)
-        printf("Alt %d (%d %d %0.1f)\n",i,altMap[i].terrain,altMap[i].shouldProcess,altMap[i].distanceFromSource);
+    //for(int i=0;i<20;i++)
+    //    printf("Alt %d (%d %d %0.1f)\n",i,altMap[i].terrain,altMap[i].shouldProcess,altMap[i].distanceFromSource);
     
     
     // Shutdown and cleanup
@@ -1123,7 +1249,7 @@ cl_mem heap;                       // device memory used for the heap array
                 }
                 break;
             case 3:
-                [self setupAltMap];
+                [self setupAltDijkstra];
                 [self AltDijkstra];
                 break;
                 
@@ -1134,7 +1260,11 @@ cl_mem heap;                       // device memory used for the heap array
         endTime = clock();
         self.textField.stringValue = [NSString stringWithFormat:@"With %d verts finished in %0.5f secs.\n",WIDTH*HEIGHT,ratio*(long)endTime - ratio*(long)startTime];
         printf("With %d verts and %d edges, finished in %0.4f seconds.\n",WIDTH*HEIGHT,WIDTH*HEIGHT*DIRECTIONS,ratio*(long)endTime - ratio*(long)startTime);
-        [self findPath];
+        
+        if(algorithm==3)
+            [self findAltPath];
+        else
+            [self findPath];
         [self setNeedsDisplay:YES];
     }    
     working = NO;
