@@ -450,26 +450,73 @@ static dispatch_queue_t queue = NULL;
     return YES;
 }
 
+typedef struct
+{
+    DPFTerrain terrain;
+    char       shouldProcess;
+    float      distanceFromSource;
+}DPFNode;
+
+DPFNode altMap[MAX_VERTS];
+
+-(void)setupAltMap
+{
+    for(int i=0;i<WIDTH*HEIGHT;i++)
+    {
+        altMap[i].terrain = DPFTerrainGround;
+        altMap[i].shouldProcess = 1;
+        altMap[i].distanceFromSource = MAX_DISTANCE;
+    }
+}
 
 const char *altKernelSource = "\n" \
-"  \n" \
-"typedef struct\n" \
-"{\n" \
-"    int x,y;\n" \
-"    int terrain;\n" \
-"    int  index;\n" \
-"}DPFVert;\n" \
-"  \n" \
-"__kernel void dijkstraWork(                \n" \
-"__global DPFVert* A,                       \n" \
-"const unsigned int blah                    \n" \
+"                                           \n" \
+"typedef struct                             \n" \
+"{                                          \n" \
+"    int        terrain;                    \n" \
+"    char       shouldProcess;              \n" \
+"    float      distanceFromSource;         \n" \
+"}DPFNode;                                  \n" \
+"                                           \n" \
+"__kernel void altDijkstraWork(             \n" \
+"__global DPFNode* Grid,                    \n" \
+"__global int*     done                     \n" \
 "                          )                \n" \
 "{                                          \n" \
 "   int k = get_global_id(0);               \n" \
-"   printf((const char*)\"openCL! %d %d = %d\\n\",blah,k,A[k].terrain);\n" \
-"   A[k].terrain = 5;                       \n" \
+"   //printf((const char*)\"Alt %d (%d %d %0.1f)\\n\",k,Grid[k].terrain,Grid[k].shouldProcess,Grid[k].distanceFromSource);\n" \
+"   if(Grid[k].shouldProcess)               \n" \
+"   {                                       \n" \
+"      *done = 0;                           \n" \
+"                                           \n" \
+"      Grid[k].shouldProcess = 0;           \n" \
+"   }                                       \n" \
 "}                                          \n" \
 "\n";
+
+/*
+for(int x=-1;x<2;x++)
+for(int y=-1;y<2;y++)
+if(x && y)
+{
+    // TODO - find lowest distance neighbor
+    //      - if neighbor distance + our cost < current cost, update and tell the neighbors
+    int index = k+y*WIDTH+x;
+    if(index>0 && index<WIDTH*HEIGHT)
+        Grid[index].shouldProcess = 1;
+}
+
+
+for(int x=-1;x<2;x++)
+for(int y=-1;y<2;y++)
+if(x && y)
+{
+    int index = k+y*WIDTH+x;
+    if(index>0 && index<WIDTH*HEIGHT)
+        Grid[index].shouldProcess = 1;
+}
+*/
+
 
 -(BOOL)AltDijkstra
 {
@@ -481,10 +528,12 @@ const char *altKernelSource = "\n" \
     cl_command_queue commands;          // compute command queue
     cl_program program;                 // compute program
     cl_kernel kernel;                   // compute kernel
-    cl_mem input;                       // device memory used for the input array
+    cl_mem localMap;                    // device memory used for the input array
+    cl_mem doneBuf;
+    int done = 0;
     
     // Connect to a compute device
-    int gpu = 0;
+    int gpu = 1;
     err = clGetDeviceIDs(NULL, gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
     if (err != CL_SUCCESS) { printf("Error: Failed to create a device group! %d\n",err); return NO; }
     
@@ -497,7 +546,7 @@ const char *altKernelSource = "\n" \
     if (!commands) { printf("Error: Failed to create a command commands!\n"); return NO; }
     
     // Create the compute program from the source buffer
-    program = clCreateProgramWithSource(context, 1, (const char **) & kernelSource, NULL, &err);
+    program = clCreateProgramWithSource(context, 1, (const char **) & altKernelSource, NULL, &err);
     if (!program) { printf("Error: Failed to create compute program!\n"); return NO; }
     
     // Build the program executable
@@ -514,40 +563,44 @@ const char *altKernelSource = "\n" \
     }
     
     // Create the compute kernel in the program we wish to run
-    kernel = clCreateKernel(program, "dijkstraWork", &err);
+    kernel = clCreateKernel(program, "altDijkstraWork", &err);
     if (!kernel || err != CL_SUCCESS) { printf("Error: Failed to create compute kernel!\n"); return NO; }
     
     // Create the array in device memory for the sort
-    input = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(DPFVert) * MAX_VERTS, NULL, NULL);
-    if (!input) { printf("Error: Failed to allocate device memory!\n"); return NO; }    
+    localMap = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(DPFNode) * WIDTH * HEIGHT, NULL, NULL);
+    if (!localMap) { printf("Error: Failed to allocate device memory!\n"); return NO; }    
     
-    
-    unsigned int blah = 5;
-    for(int i=0;i<10;i++)
-    {
-        map[i].terrain = 8;
-    }
-    
+    // Create the array in device memory for the sort
+    doneBuf = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(int), NULL, NULL);
+    if (!doneBuf) { printf("Error: Failed to allocate device memory!\n"); return NO; }    
+
     // Write our data set into the input array in device memory 
-    err = clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, sizeof(DPFVert) * MAX_VERTS, map, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(commands, localMap, CL_TRUE, 0, sizeof(DPFNode) * WIDTH * HEIGHT, altMap, 0, NULL, NULL);
     if (err != CL_SUCCESS) { printf("Error: Failed to write to source array!\n"); return NO; }
+
     
     // Get the maximum work group size for executing the kernel on the device
     err = clGetKernelWorkGroupInfo(kernel, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(local), &local, NULL);
     if (err != CL_SUCCESS) { printf("Error: Failed to retrieve kernel work group info! %d\n", err); return NO; }
     
-    global = 8;
+    global = WIDTH*HEIGHT;
     if(local>global)
         local = global;
+    //global = 1;
+    //local = 1;
     
-    for(int i=0;i<8;i++)
+    while(!done)
     {
-        blah = i + 1;
+        done = 1;
         
+        // Write our data set into the input array in device memory 
+        err = clEnqueueWriteBuffer(commands, doneBuf, CL_TRUE, 0, sizeof(int), &done, 0, NULL, NULL);
+        if (err != CL_SUCCESS) { printf("Error: Failed to write to source array!\n"); return NO; }
+                
         // Execute the kernel
         err  = 0;
-        err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &input);
-        err |= clSetKernelArg(kernel, 1, sizeof(unsigned int), &blah);
+        err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &localMap);
+        err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &doneBuf);
         if (err != CL_SUCCESS) { printf("Error: Failed to set kernel arguments! %d\n", err); return NO; }
         
         err = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, &global, &local, 0, NULL, NULL);
@@ -556,25 +609,23 @@ const char *altKernelSource = "\n" \
         // Wait for all the commands to get serviced before reading back results
         clFinish(commands);
         
+        // Read back the results from the device to verify the output
+        err = clEnqueueReadBuffer( commands, doneBuf, CL_TRUE, 0, sizeof(int), &done, 0, NULL, NULL );  
+        if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d\n", err); return NO; }  
+        
+        NSLog(@"Done = %d",done);
     }
-    
-    for(int i=0;i<10;i++)
-    {
-        NSLog(@"S>map[0][%d] = %d",i,map[i].terrain);
-    }
-    
+
     // Read back the results from the device to verify the output
-    err = clEnqueueReadBuffer( commands, input, CL_TRUE, 0, sizeof(DPFVert) * MAX_VERTS, map, 0, NULL, NULL );  
+    err = clEnqueueReadBuffer( commands, localMap, CL_TRUE, 0, sizeof(DPFNode) * WIDTH * HEIGHT, altMap, 0, NULL, NULL );  
     if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d\n", err); return NO; }
     
-    for(int i=0;i<10;i++)
-    {
-        NSLog(@"A>map[0][%d] = %d",i,map[i].terrain);
-    }
+    for(int i=0;i<20;i++)
+        printf("Alt %d (%d %d %0.1f)\n",i,altMap[i].terrain,altMap[i].shouldProcess,altMap[i].distanceFromSource);
     
     
     // Shutdown and cleanup
-    clReleaseMemObject(input);
+    clReleaseMemObject(localMap);
     clReleaseProgram(program);
     clReleaseKernel(kernel);
     clReleaseCommandQueue(commands);
@@ -718,7 +769,7 @@ cl_mem heap;                       // device memory used for the heap array
 -(BOOL)openCLSetup
 {
     // Connect to a compute device
-    int gpu = 0;
+    int gpu = 1;
     err = clGetDeviceIDs(NULL, gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
     if (err != CL_SUCCESS) { printf("Error: Failed to create a device group! %d\n",err); return NO; }
     
@@ -773,6 +824,7 @@ cl_mem heap;                       // device memory used for the heap array
     if(local>global)
         local = global;
     
+    
     return YES;
 }
 
@@ -789,9 +841,6 @@ cl_mem heap;                       // device memory used for the heap array
 
 -(BOOL)openCLWorkOnIndex:(unsigned int)source
 {
-    // Write our data set into the input array in device memory 
-    err = clEnqueueWriteBuffer(commands, theMap, CL_TRUE, 0, sizeof(DPFVert) * WIDTH*HEIGHT, map, 0, NULL, NULL);
-    if (err != CL_SUCCESS) { printf("Error: Failed to write to source array 1!\n"); return NO; }
     
     // Write our data set into the input array in device memory 
     err = clEnqueueWriteBuffer(commands, heap, CL_TRUE, 0, sizeof(int) * WIDTH*HEIGHT, unsettledVertsHeap, 0, NULL, NULL);
@@ -805,6 +854,10 @@ cl_mem heap;                       // device memory used for the heap array
     err = clEnqueueWriteBuffer(commands, theDist, CL_TRUE, 0, sizeof(float) * WIDTH*HEIGHT, dist, 0, NULL, NULL);
     if (err != CL_SUCCESS) { printf("Error: Failed to write to source array 4!\n"); return NO; }
     
+    // Write our data set into the input array in device memory 
+    err = clEnqueueWriteBuffer(commands, theMap, CL_TRUE, 0, sizeof(DPFVert) * WIDTH*HEIGHT, map, 0, NULL, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to write to source array 1!\n"); return NO; }
+        
     // Execute the kernel
     err  = 0;    
     err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &theMap);
@@ -1070,7 +1123,8 @@ cl_mem heap;                       // device memory used for the heap array
                 }
                 break;
             case 3:
-                
+                [self setupAltMap];
+                [self AltDijkstra];
                 break;
                 
             default:
