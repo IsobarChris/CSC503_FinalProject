@@ -474,13 +474,13 @@ DPFNode altMap[MAX_VERTS];
     thePath[WIDTH+1] = YES;
     thePath[currentIndex] = YES;
     
-    /*
+    
     while(currentIndex != WIDTH+1)
     {
         currentIndex = altMap[currentIndex].nearestNeighborIndex;
         thePath[currentIndex] = YES;
     }
-    */
+    
     
     NSLog(@"Done finding path.");
      
@@ -553,12 +553,14 @@ const char *altKernelSource = "\n" \
 "                                                                                      \n" \
 "__kernel void altDijkstraWork(                                                        \n" \
 "__global DPFNode* Grid,                                                               \n" \
-"  const  int      width,                                                              \n" \
-"  const  int      height,                                                             \n" \
+"__global int*     widthB,                                                             \n" \
+"__global int*     heightB,                                                            \n" \
 "__global int*     done                                                                \n" \
 "                          )                                                           \n" \
 "{                                                                                     \n" \
 "   int k = get_global_id(0);                                                          \n" \
+"   int width = *widthB;                                                               \n" \
+"   int height = *heightB;                                                             \n" \
 "                                                                                      \n" \
 "   if(Grid[k].shouldProcess)                                                          \n" \
 "   {                                                                                  \n" \
@@ -574,7 +576,7 @@ const char *altKernelSource = "\n" \
 "                {                                                                     \n" \
 "                    float newDistance = Grid[index].distanceFromSource;               \n" \
 "                    if(x!=0 && y!=0) // diagonal movement                             \n" \
-"                        newDistance += (terrainMovementPoints(Grid[k].terrain)*1.41); \n" \
+"                        newDistance += (terrainMovementPoints(Grid[k].terrain)*1.4);  \n" \
 "                    else                                                              \n" \
 "                        newDistance += terrainMovementPoints(Grid[k].terrain);        \n" \
 "                    if(newDistance < Grid[k].distanceFromSource)                      \n" \
@@ -615,7 +617,7 @@ void blah(DPFNode *Grid,int done)
                 {
                     float newDistance = Grid[index].distanceFromSource;
                     if(x!=0 && y!=0) // diagonal movement
-                        newDistance += (terrainMovementPoints(Grid[k].terrain)*1.41);
+                        newDistance += (terrainMovementPoints(Grid[k].terrain)*1.4);
                     else
                         newDistance += terrainMovementPoints(Grid[k].terrain);
                     if(newDistance < Grid[k].distanceFromSource)
@@ -653,7 +655,11 @@ void blah(DPFNode *Grid,int done)
     cl_mem localMap;                    // device memory used for the input array
     cl_mem doneBuf;
     int done = 0;
-    
+    cl_mem widthBuff;
+    int width = WIDTH;
+    cl_mem heightBuff;
+    int height = HEIGHT;
+
     // Connect to a compute device
     int gpu = 1;
     err = clGetDeviceIDs(NULL, gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
@@ -695,11 +701,27 @@ void blah(DPFNode *Grid,int done)
     // Create the array in device memory for the sort
     doneBuf = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(int), NULL, NULL);
     if (!doneBuf) { printf("Error: Failed to allocate device memory!\n"); return NO; }    
-
+    
+    // Create the array in device memory for the sort
+    widthBuff = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(int), NULL, NULL);
+    if (!widthBuff) { printf("Error: Failed to allocate device memory!\n"); return NO; }    
+    
+    // Create the array in device memory for the sort
+    heightBuff = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(int), NULL, NULL);
+    if (!heightBuff) { printf("Error: Failed to allocate device memory!\n"); return NO; }    
+    
     // Write our data set into the input array in device memory 
     err = clEnqueueWriteBuffer(commands, localMap, CL_TRUE, 0, sizeof(DPFNode) * WIDTH * HEIGHT, altMap, 0, NULL, NULL);
     if (err != CL_SUCCESS) { printf("Error: Failed to write to source array!\n"); return NO; }
 
+    // Write our data set into the input array in device memory 
+    err = clEnqueueWriteBuffer(commands, widthBuff, CL_TRUE, 0, sizeof(int), &width, 0, NULL, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to write to source array!\n"); return NO; }
+
+    // Write our data set into the input array in device memory 
+    err = clEnqueueWriteBuffer(commands, heightBuff, CL_TRUE, 0, sizeof(int), &height, 0, NULL, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to write to source array!\n"); return NO; }
+    
     
     // Get the maximum work group size for executing the kernel on the device
     err = clGetKernelWorkGroupInfo(kernel, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(local), &local, NULL);
@@ -711,8 +733,6 @@ void blah(DPFNode *Grid,int done)
     //global = 1;
     //local = 1;
     
-    int width = WIDTH;
-    int height = HEIGHT;
     while(!done)
     {
         done = 1;
@@ -724,8 +744,8 @@ void blah(DPFNode *Grid,int done)
         // Execute the kernel
         err  = 0;
         err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &localMap);
-        err |= clSetKernelArg(kernel, 1, sizeof(int), &width);
-        err |= clSetKernelArg(kernel, 2, sizeof(int), &height);
+        err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &widthBuff);
+        err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &heightBuff);
         err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &doneBuf);
         if (err != CL_SUCCESS) { printf("Error: Failed to set kernel arguments! %d\n", err); return NO; }
         
