@@ -10,4 +10,9 @@
 
 @interface DPFTerrainView : NSView
 
+@property (nonatomic,strong) NSTextField *textField;
+
+-(void)generateMapOfSize:(CGFloat)sizeFactor andSeed:(NSInteger)seed;
+-(void)findPathWithAlgorithm:(NSInteger)algorithm;
+
 @end

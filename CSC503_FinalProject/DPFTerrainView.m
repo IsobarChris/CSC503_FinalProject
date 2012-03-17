@@ -16,12 +16,17 @@
 
 #define DRAW_STEPS 0
 
-#define SIZE_FACTOR 2.0f  // can be 1,2,4,8
-#define MAP_SEED    9
+CGFloat   SIZE_FACTOR = 64.0f;
+NSInteger   MAP_SEED  = 9;
+//#define SIZE_FACTOR 32.0f  // can be 1,2,4,8
+//#define MAP_SEED    9
 
 #define WIDTH  ((int)(1024.0f/SIZE_FACTOR))
 #define HEIGHT  ((int)(768.0f/SIZE_FACTOR))
 #define DIRECTIONS 8  // can be 4 or 8  
+
+#define xstr(s) str(s)
+#define str(s) #s
 
 #define DIR_N  0
 #define DIR_S  1
@@ -33,10 +38,13 @@
 #define DIR_SE 7
 
 #define MAX_DISTANCE 10000000.0
-#define MAX_VERTS (WIDTH*HEIGHT)
+//#define MAX_VERTS (WIDTH*HEIGHT)
+#define MAX_VERTS (2048*1536)
 
 #define PIX_W  (1024.0f/(float)WIDTH)
 #define PIX_H  (768.0f/(float)HEIGHT)
+
+#define WH(x,y) (y*(WIDTH)+x)
 
 typedef enum
 {
@@ -62,7 +70,6 @@ typedef struct
 {
     int x,y;
     DPFTerrain terrain;
-    BOOL inPath;
     int  index;
 }DPFVert;
 
@@ -106,7 +113,7 @@ int yOffsetForDirection(int d)
     return 0;    
 }
 
-CGFloat terrainMovementPoints(DPFTerrain terrain)
+float terrainMovementPoints(DPFTerrain terrain)
 {
     switch (terrain) 
     {
@@ -122,18 +129,18 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
     return 9999;
 }
 
-
 @interface DPFTerrainView()
 {
-    DPFVert map[WIDTH][HEIGHT];
-    DPFEdge edge[WIDTH][HEIGHT][DIRECTIONS];
+    DPFVert map[MAX_VERTS];
     DPFTerrainColor terrainColor[DPFTerrainCount];
-    BOOL thePath[WIDTH][HEIGHT];
+    BOOL thePath[MAX_VERTS];
 }
 
 @end
 
 @implementation DPFTerrainView
+
+@synthesize textField;
 
 - (BOOL)trueForProb
 {
@@ -149,9 +156,9 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
         {
             int w = x+i;
             int h = y+j;
-            if(map[w][h].terrain == DPFTerrainWater)
+            if(map[WH(w,h)].terrain == DPFTerrainWater)
             {
-                map[w][h].terrain = terrain;
+                map[WH(w,h)].terrain = terrain;
                 if([self trueForProb])
                     [self spreadOutTerrain:terrain fromX:w andY:h];
             }
@@ -169,7 +176,7 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
         e->distance = MAX_DISTANCE;
     
     if(e->v1.x==e->v2.x || e->v1.y==e->v2.y)
-        e->distance = terrainMovementPoints(map[e->v2.x][e->v2.y].terrain);
+        e->distance = terrainMovementPoints(map[WH(e->v2.x,e->v2.y)].terrain);
 }
 
 - (void)generateMap
@@ -179,15 +186,14 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
     for(int x=0;x<WIDTH;x++)
         for(int y=0;y<HEIGHT;y++)
         {
-            thePath[x][y] = NO;
-            map[x][y].x = x;
-            map[x][y].y = y;
-            map[x][y].inPath = NO;
-            map[x][y].index = y*WIDTH+x;
+            thePath[WH(x,y)] = NO;
+            map[WH(x,y)].x = x;
+            map[WH(x,y)].y = y;
+            map[WH(x,y)].index = y*WIDTH+x;
             if(x==0 || y==0 || x==WIDTH-1 || y==HEIGHT-1)
-                map[x][y].terrain = DPFTerrainVoid;                
+                map[WH(x,y)].terrain = DPFTerrainVoid;                
             else
-                map[x][y].terrain = DPFTerrainWater;
+                map[WH(x,y)].terrain = DPFTerrainWater;
         }
     
     
@@ -201,14 +207,14 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
         {
             int x = rand()%WIDTH;
             int y = rand()%HEIGHT;
-            if(map[x][y].terrain==DPFTerrainWater)
+            if(map[WH(x,y)].terrain==DPFTerrainWater)
             {
-                map[x][y].terrain = terrain;
+                map[WH(x,y)].terrain = terrain;
                 [self spreadOutTerrain:terrain fromX:x andY:y];
             }
         }    
     }
-    
+    /*
     int edge_count = 0;
     for(int x=0;x<WIDTH;x++)
         for(int y=0;y<HEIGHT;y++)
@@ -218,16 +224,17 @@ CGFloat terrainMovementPoints(DPFTerrain terrain)
                 edge_count++;
             }
     NSLog(@"Created %d edge",edge_count);
+    */ 
 }
 
 DPFVert* allVerts[MAX_VERTS];
 int allVertsCount=0;
 
-DPFVert* unsettledVerts[MAX_VERTS];
+int unsettledVertsHeap[MAX_VERTS];
 int unsettledVertCount=0;
 
-CGFloat dist[MAX_VERTS];
-DPFVert* prev[MAX_VERTS];
+float   dist[MAX_VERTS];
+int     prev[MAX_VERTS];
 
 DPFVert* settledVerts[MAX_VERTS];
 int settledVertCount=0;
@@ -237,19 +244,19 @@ int settledVertCount=0;
 #define RIGHT(i) (2*i+1)
 - (void)insertVert:(DPFVert*)vert
 {
-    unsettledVerts[unsettledVertCount++] = vert;
+    unsettledVertsHeap[unsettledVertCount++] = vert->index;
     int i = unsettledVertCount-1;
     while(i>0)
     {
-        if(dist[unsettledVerts[i/2]->index] < dist[unsettledVerts[i]->index])
+        if(dist[unsettledVertsHeap[i/2]] < dist[unsettledVertsHeap[i]])
             break;
-        DPFVert *temp = unsettledVerts[i/2];
-        unsettledVerts[i/2] = unsettledVerts[i];
-        unsettledVerts[i] = temp;        
+        int temp = unsettledVertsHeap[i/2];
+        unsettledVertsHeap[i/2] = unsettledVertsHeap[i];
+        unsettledVertsHeap[i] = temp;        
         i/=2;
     }
     
-    if(1)
+    if(0)
     {
         for(int k=0;k<100;k++)
             for(int i=0;i<100;i++)
@@ -266,19 +273,19 @@ dispatch_semaphore_t semaphore = NULL;
     
     dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
     //NSLog(@"insert %d start",vert->index);
-    unsettledVerts[unsettledVertCount++] = vert;
+    unsettledVertsHeap[unsettledVertCount++] = vert->index;
     int i = unsettledVertCount-1;
     while(i>0)
     {
-        if(dist[unsettledVerts[i/2]->index] < dist[unsettledVerts[i]->index])
+        if(dist[unsettledVertsHeap[i/2]] < dist[unsettledVertsHeap[i]])
             break;
-        DPFVert *temp = unsettledVerts[i/2];
-        unsettledVerts[i/2] = unsettledVerts[i];
-        unsettledVerts[i] = temp;        
+        int temp = unsettledVertsHeap[i/2];
+        unsettledVertsHeap[i/2] = unsettledVertsHeap[i];
+        unsettledVertsHeap[i] = temp;        
         i/=2;
     }
     
-    if(1)
+    if(0)
     {
         for(int k=0;k<100;k++)
             for(int i=0;i<100;i++)
@@ -292,47 +299,54 @@ dispatch_semaphore_t semaphore = NULL;
 static int slowDown;
 - (DPFVert*)removeMinVert
 {
-    DPFVert *savedMinVert = unsettledVerts[0];
-    unsettledVerts[0] = unsettledVerts[--unsettledVertCount];
+    int savedMinVert = unsettledVertsHeap[0];
+    unsettledVertsHeap[0] = unsettledVertsHeap[--unsettledVertCount];
+    unsettledVertsHeap[unsettledVertCount] = -1;
     int i=0;
     while(i<unsettledVertCount)
     {
         int minIndex = i;
-        if(LEFT(i)<unsettledVertCount && dist[unsettledVerts[LEFT(i)]->index] < dist[unsettledVerts[minIndex]->index])
+        if(LEFT(i)<unsettledVertCount && dist[unsettledVertsHeap[LEFT(i)]] < dist[unsettledVertsHeap[minIndex]])
             minIndex = LEFT(i);
-        if(RIGHT(i)<unsettledVertCount && dist[unsettledVerts[RIGHT(i)]->index] < dist[unsettledVerts[minIndex]->index])
+        if(RIGHT(i)<unsettledVertCount && dist[unsettledVertsHeap[RIGHT(i)]] < dist[unsettledVertsHeap[minIndex]])
             minIndex = RIGHT(i);
         if(minIndex!=i)
         {
-            DPFVert *temp = unsettledVerts[i];
-            unsettledVerts[i] = unsettledVerts[minIndex];
-            unsettledVerts[minIndex] = temp;
+            int temp = unsettledVertsHeap[i];
+            unsettledVertsHeap[i] = unsettledVertsHeap[minIndex];
+            unsettledVertsHeap[minIndex] = temp;
             i = minIndex;
         }
         else
             break;
     }
     
-    return savedMinVert;
+    return allVerts[savedMinVert];
 }
 
 - (void)resetDijkstra
 {
+    allVertsCount=0;
+    unsettledVertCount=0;
+    settledVertCount=0;    
+    
+    for(int i=0;i<MAX_VERTS;i++)
+        unsettledVertsHeap[i] = -1;
+        
     for(int x=0;x<WIDTH;x++)
         for(int y=0;y<HEIGHT;y++)
         {
-            if(&map[x][y]==NULL)
+            if(&map[WH(x,y)]==NULL)
                 NSLog(@"Null map vert.");
-            allVerts[y*WIDTH+x] = &map[x][y];
+            allVerts[y*WIDTH+x] = &map[WH(x,y)];
             allVertsCount++;
-            map[x][y].inPath = NO;
-            map[x][y].index = y*WIDTH+x;
+            map[WH(x,y)].index = y*WIDTH+x;
         }    
     
     for(int i=0;i<MAX_VERTS;i++)
     {
         dist[i]=MAX_DISTANCE;
-        prev[i]=NULL;
+        prev[i]=-1;
         settledVerts[i]=NULL;
     }
     
@@ -370,7 +384,7 @@ static int slowDown;
         if(xOff<0 || yOff<0 || xOff>=WIDTH || yOff>=HEIGHT)
             continue; // off the grid, ignore this edge
         
-        v = &map[xOff][yOff];
+        v = &map[WH(xOff,yOff)];
         int vIndex = v->index;
         
         CGFloat distToV = terrainMovementPoints(v->terrain);
@@ -380,7 +394,7 @@ static int slowDown;
         if(dist[vIndex] > dist[uIndex] + distToV)
         {
             dist[vIndex] = dist[uIndex] + distToV;
-            prev[vIndex] = u;
+            prev[vIndex] = uIndex;
             [self insertVert:v];
         }
     }
@@ -418,7 +432,7 @@ static dispatch_queue_t queue = NULL;
         if(xOff<0 || yOff<0 || xOff>=WIDTH || yOff>=HEIGHT)
             return; // off the grid, ignore this edge
         
-        DPFVert *v = &map[xOff][yOff];
+        DPFVert *v = &map[WH(xOff,yOff)];
         int vIndex = v->index;
         
         CGFloat distToV = terrainMovementPoints(v->terrain);
@@ -428,7 +442,7 @@ static dispatch_queue_t queue = NULL;
         if(dist[vIndex] > dist[uIndex] + distToV)
         {
             dist[vIndex] = dist[uIndex] + distToV;
-            prev[vIndex] = u;
+            prev[vIndex] = uIndex;
             [self insertVertP1:v];
         }
     });
@@ -437,21 +451,28 @@ static dispatch_queue_t queue = NULL;
 }
 
 
-//"   __global int*  A,                       \n" \
-"   const unsigned int len)                 \n" \
-
-const char *kernelSource = "\n" \
+const char *altKernelSource = "\n" \
+"  \n" \
+"typedef struct\n" \
+"{\n" \
+"    int x,y;\n" \
+"    int terrain;\n" \
+"    int  index;\n" \
+"}DPFVert;\n" \
+"  \n" \
 "__kernel void dijkstraWork(                \n" \
-"void)                                      \n" \
+"__global DPFVert* A,                       \n" \
+"const unsigned int blah                    \n" \
+"                          )                \n" \
 "{                                          \n" \
 "   int k = get_global_id(0);               \n" \
-"   printf((const char*)\"openCL! %d\\n\",k);\n" \
+"   printf((const char*)\"openCL! %d %d = %d\\n\",blah,k,A[k].terrain);\n" \
+"   A[k].terrain = 5;                       \n" \
 "}                                          \n" \
 "\n";
 
--(BOOL)DijkstraP2
+-(BOOL)AltDijkstra
 {
-    int len = 8;
     int err;                            // error code returned from api calls
     size_t global;                      // global domain size for our calculation
     size_t local;                       // local domain size for our calculation
@@ -497,12 +518,19 @@ const char *kernelSource = "\n" \
     if (!kernel || err != CL_SUCCESS) { printf("Error: Failed to create compute kernel!\n"); return NO; }
     
     // Create the array in device memory for the sort
-    input = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(int) * len, NULL, NULL);
+    input = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(DPFVert) * MAX_VERTS, NULL, NULL);
     if (!input) { printf("Error: Failed to allocate device memory!\n"); return NO; }    
     
+    
+    unsigned int blah = 5;
+    for(int i=0;i<10;i++)
+    {
+        map[i].terrain = 8;
+    }
+    
     // Write our data set into the input array in device memory 
-    //err = clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, sizeof(int) * len, A, 0, NULL, NULL);
-    //if (err != CL_SUCCESS) { printf("Error: Failed to write to source array!\n"); return NO; }
+    err = clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, sizeof(DPFVert) * MAX_VERTS, map, 0, NULL, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to write to source array!\n"); return NO; }
     
     // Get the maximum work group size for executing the kernel on the device
     err = clGetKernelWorkGroupInfo(kernel, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(local), &local, NULL);
@@ -512,21 +540,38 @@ const char *kernelSource = "\n" \
     if(local>global)
         local = global;
     
-    // Execute the kernel
-    err  = 0;
-    //err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &input);
-    //err |= clSetKernelArg(kernel, 1, sizeof(unsigned int), &len);
-    if (err != CL_SUCCESS) { printf("Error: Failed to set kernel arguments! %d\n", err); return NO; }
+    for(int i=0;i<8;i++)
+    {
+        blah = i + 1;
+        
+        // Execute the kernel
+        err  = 0;
+        err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &input);
+        err |= clSetKernelArg(kernel, 1, sizeof(unsigned int), &blah);
+        if (err != CL_SUCCESS) { printf("Error: Failed to set kernel arguments! %d\n", err); return NO; }
+        
+        err = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, &global, &local, 0, NULL, NULL);
+        if (err) { printf("Error: Failed to execute kernel (%d)!\n",err); return EXIT_FAILURE; } 
+        
+        // Wait for all the commands to get serviced before reading back results
+        clFinish(commands);
+        
+    }
     
-    err = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, &global, &local, 0, NULL, NULL);
-    if (err) { printf("Error: Failed to execute kernel (%d)!\n",err); return EXIT_FAILURE; } 
-    
-    // Wait for all the commands to get serviced before reading back results
-    clFinish(commands);
+    for(int i=0;i<10;i++)
+    {
+        NSLog(@"S>map[0][%d] = %d",i,map[i].terrain);
+    }
     
     // Read back the results from the device to verify the output
-    //err = clEnqueueReadBuffer( commands, input, CL_TRUE, 0, sizeof(int) * len, A, 0, NULL, NULL );  
-    //if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d\n", err); return NO; }
+    err = clEnqueueReadBuffer( commands, input, CL_TRUE, 0, sizeof(DPFVert) * MAX_VERTS, map, 0, NULL, NULL );  
+    if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d\n", err); return NO; }
+    
+    for(int i=0;i<10;i++)
+    {
+        NSLog(@"A>map[0][%d] = %d",i,map[i].terrain);
+    }
+    
     
     // Shutdown and cleanup
     clReleaseMemObject(input);
@@ -539,6 +584,324 @@ const char *kernelSource = "\n" \
 }
 
 
+
+//"   __global int*  A,                       \n" \
+"   const unsigned int len)                 \n" \
+
+const char *kernelSource = "\n" \
+"  \n" \
+"typedef struct\n" \
+"{\n" \
+"    int x,y;\n" \
+"    int terrain;\n" \
+"    int  index;\n" \
+"}DPFVert;\n" \
+"  \n" \
+"  int xOffsetForDirection(int d);  \n" \
+"  int yOffsetForDirection(int d);  \n" \
+"  float terrainMovementPoints(int terrain);  \n" \
+"  \n" \
+"  \n" \
+"  float terrainMovementPoints(int terrain)\n" \
+"  {\n" \
+"      switch (terrain) \n" \
+"      {\n" \
+"          case 0:     return 9999;\n" \
+"          case 2:   return 1.0;\n" \
+"          case 3:    return 2.0;\n" \
+"          case 1:    return 8.0;\n" \
+"          case 4:   return 3.0;\n" \
+"          case 5: return 5.0;\n" \
+"          case 6:    return 4.0;\n" \
+"          default: return 9999;\n" \
+"      }\n" \
+"      return 9999;\n" \
+"  }\n" \
+"  \n" \
+"  int xOffsetForDirection(int d)  \n" \
+"  {  \n" \
+"      switch (d)   \n" \
+"      {  \n" \
+"          case 0: return  0; // N  \n" \
+"          case 1: return  0; // S  \n" \
+"          case 2: return  1; // E  \n" \
+"          case 3: return -1; // W  \n" \
+"          case 4: return -1; // NW  \n" \
+"          case 5: return  1; // NE  \n" \
+"          case 6: return -1; // SW  \n" \
+"          case 7: return  1; // SE  \n" \
+"      }  \n" \
+"      return 0;  \n" \
+"  }  \n" \
+"    \n" \
+"  int yOffsetForDirection(int d)  \n" \
+"  {  \n" \
+"      switch (d)   \n" \
+"      {  \n" \
+"          case 0: return -1; // N  \n" \
+"          case 1: return  1; // S  \n" \
+"          case 2: return  0; // E  \n" \
+"          case 3: return  0; // W  \n" \
+"          case 4: return -1; // NW  \n" \
+"          case 5: return -1; // NE  \n" \
+"          case 6: return  1; // SW  \n" \
+"          case 7: return  1; // SE  \n" \
+"      }  \n" \
+"      return 0;      \n" \
+"  }  \n" \
+"  \n" \
+"  \n" \
+"  \n" \
+"  \n" \
+"__kernel void dijkstraWork(                \n" \
+"__global DPFVert* map,                     \n" \
+"const unsigned int source,                 \n" \
+"__global int* heap,                        \n" \
+"const int heapSize,                        \n" \
+"__global float* dist,                      \n" \
+"__global int*   prev                       \n" \
+"                          )                \n" \
+"{                                          \n" \
+"   float SIZE_FACTOR = 64.0;               \n" \
+"   int width = "xstr(WIDTH)";              \n" \
+"   int d = get_global_id(0);               \n" \
+"   int x = source % width;                 \n" \
+"   int y = source / width;                 \n" \
+"   int uIndex = source;                    \n" \
+"                                           \n" \
+"int xOff = x+xOffsetForDirection(d);       \n" \
+"int yOff = y+yOffsetForDirection(d);       \n" \
+"                                           \n" \
+"   //printf((const char*)\"%d:(%d,%d %f %d) xOff = %d  yOff = %d\\n\",d,x,y,SIZE_FACTOR,width,xOff,yOff);\n" \
+"                                           \n" \
+"if(xOff<0 || yOff<0 || xOff>=" xstr(WIDTH) " || yOff>=" xstr(HEIGHT) ") \n" \
+"return; // off the grid, ignore this edge  \n" \
+"                                           \n" \
+"__global DPFVert *v = &map[xOff+" xstr(WIDTH) "*yOff]; \n" \
+"int vIndex = v->index;                     \n" \
+"                                           \n" \
+"float distToV = terrainMovementPoints(v->terrain); \n" \
+"if(x!=v->x && y!=v->y)                     \n" \
+"distToV *= 1.4;                            \n" \
+"                                           \n" \
+"float d1 = dist[vIndex];                   \n" \
+"float d2 = dist[uIndex];                   \n" \
+"//printf((const char*)\"(%d)%0.1f > (%d)%0.1f + %0.1f?\\n\",vIndex,d1,uIndex,d2,distToV); \n" \
+"if(dist[vIndex] > dist[uIndex] + distToV)  \n" \
+"{                                          \n" \
+"    dist[vIndex] = dist[uIndex] + distToV; \n" \
+"    prev[vIndex] = uIndex;                 \n" \
+"    heap[heapSize+d] = vIndex;             \n" \
+"}                                          \n" \
+"    //heap[heapSize+d] = vIndex;           \n" \
+"                                           \n" \
+"   //printf((const char*)\"openCL! map[%d][%d]=%d  heapSize = %d  heap[%d]=%d\\n\",x,y,map[source].terrain,heapSize,heapSize-1,heap[heapSize-1]);\n" \
+"                                           \n" \
+"}                                          \n" \
+"\n";
+
+
+int len = DIRECTIONS;
+int err;                            // error code returned from api calls
+size_t global;                      // global domain size for our calculation
+size_t local;                       // local domain size for our calculation
+cl_device_id device_id;             // compute device id 
+cl_context context;                 // compute context
+cl_command_queue commands;          // compute command queue
+cl_program program;                 // compute program
+cl_kernel kernel;                   // compute kernel
+cl_mem theMap;                        // device memory used for the map array
+cl_mem theDist;                        // device memory used for the map array
+cl_mem thePrev;                        // device memory used for the map array
+cl_mem heap;                       // device memory used for the heap array
+
+-(BOOL)openCLSetup
+{
+    // Connect to a compute device
+    int gpu = 0;
+    err = clGetDeviceIDs(NULL, gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to create a device group! %d\n",err); return NO; }
+    
+    // Create a compute context 
+    context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
+    if (!context) { printf("Error: Failed to create a compute context!\n"); return NO; }
+    
+    // Create a command commands
+    commands = clCreateCommandQueue(context, device_id, 0, &err);
+    if (!commands) { printf("Error: Failed to create a command commands!\n"); return NO; }
+    
+    // Create the compute program from the source buffer
+    program = clCreateProgramWithSource(context, 1, (const char **) & kernelSource, NULL, &err);
+    if (!program) { printf("Error: Failed to create compute program!\n"); return NO; }
+    
+    // Build the program executable
+    err = clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
+    if (err != CL_SUCCESS)
+    {
+        size_t len;
+        char buffer[2048];
+        
+        printf("Error: Failed to build program executable!\n");
+        clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);
+        printf("%s\n", buffer);
+        return NO;
+    }
+    
+    // Create the compute kernel in the program we wish to run
+    kernel = clCreateKernel(program, "dijkstraWork", &err);
+    if (!kernel || err != CL_SUCCESS) { printf("Error: Failed to create compute kernel!\n"); return NO; }
+    
+    // Create the array in device memory for the sort
+    theMap = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(DPFVert) * WIDTH*HEIGHT, NULL, NULL);
+    if (!theMap) { printf("Error: Failed to allocate device memory!\n"); return NO; }    
+    
+    heap = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(int) * WIDTH*HEIGHT, NULL, NULL);
+    if (!heap) { printf("Error: Failed to allocate device memory!\n"); return NO; }    
+    
+    thePrev = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(int) * WIDTH*HEIGHT, NULL, NULL);
+    if (!thePrev) { printf("Error: Failed to allocate device memory!\n"); return NO; }    
+    
+    theDist = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(float) * WIDTH*HEIGHT, NULL, NULL);
+    if (!theDist) { printf("Error: Failed to allocate device memory!\n"); return NO; }    
+    
+    
+    // Get the maximum work group size for executing the kernel on the device
+    err = clGetKernelWorkGroupInfo(kernel, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(local), &local, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to retrieve kernel work group info! %d\n", err); return NO; }
+    
+    global = len;
+    if(local>global)
+        local = global;
+    
+    return YES;
+}
+
+-(void)openCLCleanup
+{
+    // Shutdown and cleanup
+    clReleaseMemObject(theMap);
+    clReleaseMemObject(heap);
+    clReleaseProgram(program);
+    clReleaseKernel(kernel);
+    clReleaseCommandQueue(commands);
+    clReleaseContext(context);
+}
+
+-(BOOL)openCLWorkOnIndex:(unsigned int)source
+{
+    // Write our data set into the input array in device memory 
+    err = clEnqueueWriteBuffer(commands, theMap, CL_TRUE, 0, sizeof(DPFVert) * WIDTH*HEIGHT, map, 0, NULL, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to write to source array 1!\n"); return NO; }
+    
+    // Write our data set into the input array in device memory 
+    err = clEnqueueWriteBuffer(commands, heap, CL_TRUE, 0, sizeof(int) * WIDTH*HEIGHT, unsettledVertsHeap, 0, NULL, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to write to source array 2!\n"); return NO; }
+    
+    // Write our data set into the input array in device memory 
+    err = clEnqueueWriteBuffer(commands, thePrev, CL_TRUE, 0, sizeof(int) * WIDTH*HEIGHT, prev, 0, NULL, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to write to source array 3!\n"); return NO; }
+    
+    // Write our data set into the input array in device memory 
+    err = clEnqueueWriteBuffer(commands, theDist, CL_TRUE, 0, sizeof(float) * WIDTH*HEIGHT, dist, 0, NULL, NULL);
+    if (err != CL_SUCCESS) { printf("Error: Failed to write to source array 4!\n"); return NO; }
+    
+    // Execute the kernel
+    err  = 0;    
+    err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &theMap);
+    err |= clSetKernelArg(kernel, 1, sizeof(unsigned int), &source);
+    err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &heap);
+    err |= clSetKernelArg(kernel, 3, sizeof(int), &unsettledVertCount);
+    err |= clSetKernelArg(kernel, 4, sizeof(cl_mem), &theDist);
+    err |= clSetKernelArg(kernel, 5, sizeof(cl_mem), &thePrev);
+    if (err != CL_SUCCESS) { printf("Error: Failed to set kernel arguments! %d\n", err); return NO; }
+    
+    err = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, &global, &local, 0, NULL, NULL);
+    if (err) { printf("Error: Failed to execute kernel (%d)!\n",err); return EXIT_FAILURE; } 
+    
+    // Wait for all the commands to get serviced before reading back results
+    clFinish(commands);
+    
+    // Read back the results from the device to verify the output
+    err = clEnqueueReadBuffer( commands, theMap, CL_TRUE, 0, sizeof(DPFVert) * WIDTH*HEIGHT, map, 0, NULL, NULL );  
+    if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d -1\n", err); return NO; }
+    
+    // Read back the results from the device to verify the output
+    err = clEnqueueReadBuffer( commands, heap, CL_TRUE, 0, sizeof(int) * WIDTH*HEIGHT, unsettledVertsHeap, 0, NULL, NULL );  
+    if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d -2\n", err); return NO; }   
+    
+    // Read back the results from the device to verify the output
+    err = clEnqueueReadBuffer( commands, thePrev, CL_TRUE, 0, sizeof(int) * WIDTH*HEIGHT, prev, 0, NULL, NULL );  
+    if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d -3\n", err); return NO; }   
+    
+    // Read back the results from the device to verify the output
+    err = clEnqueueReadBuffer( commands, theDist, CL_TRUE, 0, sizeof(float) * WIDTH*HEIGHT, dist, 0, NULL, NULL );  
+    if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d -4\n", err); return NO; }    
+    
+    // update whatever heap work we need to
+    int checkMax = unsettledVertCount+DIRECTIONS;
+    for(int i = unsettledVertCount;i<checkMax;i++)
+    {
+        if(unsettledVertsHeap[i]!=-1)
+            [self insertVert:allVerts[unsettledVertsHeap[i]]];
+    }
+    
+    return YES;
+}
+
+-(BOOL)DijkstraP2
+{
+    if(unsettledVertCount==0)
+        return NO; // nothing to do
+    
+    if(!queue)
+        queue = dispatch_queue_create("Direction Concurrent Queue", DISPATCH_QUEUE_CONCURRENT);
+    
+    DPFVert *u = [self removeMinVert];
+    
+    int uIndex = u->index;
+    if(dist[uIndex]==MAX_DISTANCE)
+        return NO;
+    
+    // Add this node to the list of settled verts, it's as short as it gets
+    settledVerts[settledVertCount++] = u;
+    
+    // This is the end node, we're done
+    if(u->x==WIDTH-2 && u->y==HEIGHT-2)
+        return NO;
+    
+    [self openCLWorkOnIndex:u->index];
+    
+    //return NO;
+    
+    /*
+    dispatch_apply(8, queue, ^(size_t d) 
+                   {
+                       int xOff = u->x+xOffsetForDirection(d);
+                       int yOff = u->y+yOffsetForDirection(d);
+                       if(xOff<0 || yOff<0 || xOff>=WIDTH || yOff>=HEIGHT)
+                           return; // off the grid, ignore this edge
+                       
+                       DPFVert *v = &map[xOff][yOff];
+                       int vIndex = v->index;
+                       
+                       CGFloat distToV = terrainMovementPoints(v->terrain);
+                       if(u->x!=v->x && u->y!=v->y)
+                           distToV *= 1.4;
+                       
+                       if(dist[vIndex] > dist[uIndex] + distToV)
+                       {
+                           dist[vIndex] = dist[uIndex] + distToV;
+                           prev[vIndex] = uIndex;
+                           [self insertVertP1:v];
+                       }
+                   });
+    */
+    
+    //NSLog(@"Iterrate");
+    return YES;
+}
+
+
 - (void)findPath
 {
     for(int x=0;x<WIDTH;x++)
@@ -546,16 +909,15 @@ const char *kernelSource = "\n" \
         {
             //if(x==(int)((float)y*((float)WIDTH/(float)HEIGHT)))
             //    thePath[x][y] = YES;
-            thePath[x][y] = NO;
+            thePath[WH(x,y)] = NO;
         }
     
     DPFVert *current = allVerts[(HEIGHT-2)*WIDTH+(WIDTH-2)];
     while(current)
     {
-        thePath[current->x][current->y] = YES;
-        current = prev[current->index];
+        thePath[WH(current->x,current->y)] = YES;
+        current = allVerts[prev[current->index]];
     }
-    
 }
 
 - (id)initWithFrame:(NSRect)frame
@@ -593,23 +955,6 @@ const char *kernelSource = "\n" \
         terrainColor[DPFTerrainWater].r = 0.0;
         terrainColor[DPFTerrainWater].g = 0.0;
         terrainColor[DPFTerrainWater].b = 1.0;
-        
-        [self resetDijkstra];
-        [self setNeedsDisplay:YES];
-        
-        if(DRAW_STEPS)
-            [NSTimer scheduledTimerWithTimeInterval:0.025f target:self selector:@selector(step:) userInfo:nil repeats:YES];
-        else
-        {
-            clock_t startTime, endTime;
-            float ratio = 1./CLOCKS_PER_SEC;
-            startTime = clock();
-            while([self DijkstraP2]);
-            endTime = clock();
-            printf("With %d verts and %d edges, finished in %0.4f seconds.\n",MAX_VERTS,MAX_VERTS*DIRECTIONS,ratio*(long)endTime - ratio*(long)startTime);
-            [self findPath];
-            [self setNeedsDisplay:YES];
-        }
     }
     
     return self;
@@ -636,9 +981,9 @@ const char *kernelSource = "\n" \
     for(int x=0;x<WIDTH;x++)
         for(int y=0;y<HEIGHT;y++)
         {
-            CGFloat r = terrainColor[map[x][y].terrain].r;
-            CGFloat g = terrainColor[map[x][y].terrain].g;
-            CGFloat b = terrainColor[map[x][y].terrain].b;
+            CGFloat r = terrainColor[map[WH(x,y)].terrain].r;
+            CGFloat g = terrainColor[map[WH(x,y)].terrain].g;
+            CGFloat b = terrainColor[map[WH(x,y)].terrain].b;
             //NSLog(@"r=%0.2f g=%0.2f b=%0.2f",r,g,b);
             
             CGContextSetRGBFillColor(ctx, r, g, b, 1);
@@ -657,7 +1002,7 @@ const char *kernelSource = "\n" \
     for(int x=0;x<WIDTH;x++)
         for(int y=0;y<HEIGHT;y++)
         {
-            if(thePath[x][y])
+            if(thePath[WH(x,y)])
             {
                 CGContextSetRGBFillColor(ctx, 1, 1, 0, 1);
                 CGContextFillEllipseInRect(ctx, CGRectMake((float)x*PIX_W, (float)y*PIX_H, PIX_W, PIX_H));
@@ -678,5 +1023,67 @@ const char *kernelSource = "\n" \
         }
 }
 
+
+-(void)generateMapOfSize:(CGFloat)sizeFactor andSeed:(NSInteger)seed
+{
+    SIZE_FACTOR = sizeFactor;
+    MAP_SEED = seed;
+    
+    //NSLog(@"Size %0.1f, seed %d",SIZE_FACTOR,MAP_SEED);
+    //NSLog(@"Width = %d  Height = %d",WIDTH,HEIGHT);
+    
+    [self generateMap];
+    [self setNeedsDisplay:YES];
+}
+-(void)findPathWithAlgorithm:(NSInteger)algorithm
+{
+    static BOOL working = NO;
+    
+    if(working)
+        return;
+    working = YES;
+    
+    [self resetDijkstra];
+    [self setNeedsDisplay:YES];
+    
+    if(DRAW_STEPS)
+        [NSTimer scheduledTimerWithTimeInterval:0.025f target:self selector:@selector(step:) userInfo:nil repeats:YES];
+    else
+    {
+        clock_t startTime, endTime;
+        float ratio = 1./CLOCKS_PER_SEC;
+        startTime = clock();
+        
+        switch (algorithm) 
+        {
+            case 0:
+                while([self Dijkstra]);
+                break;
+            case 1:
+                while([self DijkstraP1]);
+                break;
+            case 2:
+                if([self openCLSetup])
+                {
+                    while([self DijkstraP2]);
+                    [self openCLCleanup];
+                }
+                break;
+            case 3:
+                
+                break;
+                
+            default:
+                break;
+        }
+        
+        endTime = clock();
+        self.textField.stringValue = [NSString stringWithFormat:@"With %d verts finished in %0.5f secs.\n",WIDTH*HEIGHT,ratio*(long)endTime - ratio*(long)startTime];
+        printf("With %d verts and %d edges, finished in %0.4f seconds.\n",WIDTH*HEIGHT,WIDTH*HEIGHT*DIRECTIONS,ratio*(long)endTime - ratio*(long)startTime);
+        [self findPath];
+        [self setNeedsDisplay:YES];
+    }    
+    working = NO;
+}
 
 @end
