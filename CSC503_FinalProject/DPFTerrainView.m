@@ -603,43 +603,58 @@ const char *altKernelSource = "\n" \
 "}                                                                                     \n" \
 "\n";
 
-void blah(DPFNode *Grid,int done)
-{
-    int k=0;
+/*
+__kernel void altDijkstraWork(                                                        
+                              __global DPFNode* Grid,                                                               
+                              __global int*     widthB,                                                             
+                              __global int*     heightB,                                                            
+                              __global int*     done                                                                
+                              )                                                           
+{                                                                                     
+    int k = get_global_id(0);                                                          
+    int width = *widthB;                                                               
+    int height = *heightB;                                                             
     
-    int notifyNeighbors = 0;
-    for(int x=-1;x<2;x++)
-        for(int y=-1;y<2;y++)
-            if(x || y)
-            {
-                int index = k+y*WIDTH+x;
-                if(index>0 && index<WIDTH*HEIGHT)
-                {
-                    float newDistance = Grid[index].distanceFromSource;
-                    if(x!=0 && y!=0) // diagonal movement
-                        newDistance += (terrainMovementPoints(Grid[k].terrain)*1.4);
-                    else
-                        newDistance += terrainMovementPoints(Grid[k].terrain);
-                    if(newDistance < Grid[k].distanceFromSource)
-                    {
-                        Grid[k].distanceFromSource = newDistance;
-                        notifyNeighbors = 1;
-                    }
-                }
-            }
-    
-    if(notifyNeighbors)
-        for(int x=-1;x<2;x++)
-            for(int y=-1;y<2;y++)
-                if(x || y)
-                {
-                    int index = k+y*WIDTH+x;
-                    if(index>0 && index<WIDTH*HEIGHT)
-                        Grid[index].shouldProcess = 1;
-                }
-    
-
+    if(Grid[k].shouldProcess)                                                          
+    {                                                                                  
+        *done = 0;                                                                        
+        
+        int notifyNeighbors = 0;                                                          
+        for(int x=-1;x<2;x++)                                                             
+            for(int y=-1;y<2;y++)                                                         
+                if(x || y)                                                                
+                {                                                                         
+                    int index = k+y*width+x;                                              
+                    if(index>0 && index<width*height)                                     
+                    {                                                                     
+                        float newDistance = Grid[index].distanceFromSource;               
+                        if(x!=0 && y!=0) // diagonal movement                             
+                            newDistance += (terrainMovementPoints(Grid[k].terrain)*1.4);  
+                        else                                                              
+                            newDistance += terrainMovementPoints(Grid[k].terrain);        
+                        if(newDistance < Grid[k].distanceFromSource)                      
+                        {                                                                 
+                            Grid[k].distanceFromSource = newDistance;                     
+                            Grid[k].nearestNeighborIndex = index;                         
+                            notifyNeighbors = 1;                                          
+                        }                                                                 
+                    }                                                                     
+                }                                                                         
+        
+        if(notifyNeighbors)                                                               
+            for(int x=-1;x<2;x++)                                                         
+                for(int y=-1;y<2;y++)                                                     
+                    if(x || y)                                                            
+                    {                                                                     
+                        int index = k+y*width+x;                                          
+                        if(index>0 && index<width*height)                                 
+                            Grid[index].shouldProcess = 1;                                
+                    }                                                                     
+        
+        Grid[k].shouldProcess = 0;                                                        
+    }   
 }
+*/
 
 
 -(BOOL)AltDijkstra
@@ -733,6 +748,7 @@ void blah(DPFNode *Grid,int done)
     //global = 1;
     //local = 1;
     
+    int iterations = 0;
     while(!done)
     {
         done = 1;
@@ -759,9 +775,12 @@ void blah(DPFNode *Grid,int done)
         err = clEnqueueReadBuffer( commands, doneBuf, CL_TRUE, 0, sizeof(int), &done, 0, NULL, NULL );  
         if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d\n", err); return NO; }  
         
+        iterations++;
         //NSLog(@"Done = %d",done);
     }
 
+    NSLog(@"Iterations = %d",iterations);
+    
     // Read back the results from the device to verify the output
     err = clEnqueueReadBuffer( commands, localMap, CL_TRUE, 0, sizeof(DPFNode) * WIDTH * HEIGHT, altMap, 0, NULL, NULL );  
     if (err != CL_SUCCESS) { printf("Error: Failed to read output array! %d\n", err); return NO; }
